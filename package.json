@@ -1,0 +1,24 @@
+{
+  "name": "applicraft",
+  "version": "1.0.0",
+  "description": "Node.js TypeScript Application",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "*",
+    "@octokit/rest": "*",
+    "dotenv": "*"
+  },
+  "devDependencies": {
+    "typescript": "*",
+    "@types/node": "*",
+    "ts-node": "*"
+  }
+}
