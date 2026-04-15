@@ -4,6 +4,7 @@ export interface ApplicationContext {
   date: string;
   outputDir: string;
   jobDescription: string;
+  baseCvPath: string;
 }
 
 export interface AgentOutput {

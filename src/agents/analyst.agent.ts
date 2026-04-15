@@ -2,6 +2,7 @@ import { BaseAgent } from './base-agent';
 import { FileSystemManager } from '../core/fs-manager';
 import { ClaudeClient } from '../core/claude-client';
 import { ApplicationContext, AgentOutput, GapAnalysis } from '../core/types';
+import * as path from 'path';
 
 /**
  * AnalystAgent - Prototype
@@ -18,16 +19,39 @@ export class AnalystAgent extends BaseAgent {
    */
   async execute(context: ApplicationContext, outputDir: string): Promise<AgentOutput> {
     const fileName = "gap-analysis.json";
-    
-    const mockAnalysis: GapAnalysis = {
-      matchedSkills: ["TypeScript", "Node.js"],
-      missingSkills: ["AWS Lambda", "PostgreSQL"],
-      emphasisPoints: ["Focus on scalable architecture and async patterns"],
-      overallFit: "moderate",
-      summary: "MOCK GAP ANALYSIS: The candidate has strong core skills but lacks specific cloud and DB experience listed in the JD."
-    };
 
-    const content = JSON.stringify(mockAnalysis, null, 2);
+    const companyBrief = this.fs.readFile(path.join(outputDir, "company-brief.md"));
+    const baseCv = this.fs.readFile(context.baseCvPath);
+
+    const prompt = `You are a technical recruiter analyzing a candidate's CV against a job opportunity.
+
+  Company Brief:
+  ${companyBrief}
+
+  Candidate CV:
+  ${baseCv}
+
+  Analyze the match and respond with ONLY a JSON object. No markdown, no explanation, no code fences. Raw JSON only.
+
+  The JSON must exactly match this structure:
+  {
+    "matchedSkills": [],
+    "missingSkills": [],
+    "emphasisPoints": [],
+    "overallFit": "strong" | "moderate" | "weak",
+    "summary": ""
+  }
+
+  Rules:
+  - matchedSkills and missingSkills must be specific (e.g. "C# .NET" not just "backend")
+  - emphasisPoints must be actionable (e.g. "highlight Oracle-to-PostgreSQL migration experience")
+  - overallFit: strong = 80%+ requirements met, moderate = 50-79%, weak = below 50%
+  - summary must be 2-3 sentences, honest not promotional
+  - Output raw JSON only. Any text outside the JSON will break the pipeline.`;
+
+    const parsed: GapAnalysis = await this.llm.generateJSON<GapAnalysis>(prompt);
+    const content = JSON.stringify(parsed, null, 2);
+
     const filePath = this.writeOutput(fileName, content, outputDir);
 
     return {

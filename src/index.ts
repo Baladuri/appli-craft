@@ -74,6 +74,7 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<vo
     date,
     jobDescription: orchConfig.jobDescription,
     outputDir,
+    baseCvPath: orchConfig.baseCvPath,
   };
 
   // ── Step 5: Instantiate All Agents ────────────────────────────────────────
