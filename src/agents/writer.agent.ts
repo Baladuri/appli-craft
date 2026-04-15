@@ -18,14 +18,15 @@ export class WriterAgent extends BaseAgent {
    * Generates mock tailored CV and cover letter files.
    */
   async execute(context: ApplicationContext, outputDir: string): Promise<AgentOutput> {
-    const cvFileName = "cv-tailored.md";
-    const clFileName = "cover-letter.md";
+    try {
+      const cvFileName = "cv-tailored.md";
+      const clFileName = "cover-letter.md";
 
-    const companyBrief = this.fs.readFile(path.join(outputDir, "company-brief.md"));
-    const gapAnalysis = this.fs.readFile(path.join(outputDir, "gap-analysis.json"));
-    const baseCv = this.fs.readFile(context.baseCvPath);
+      const companyBrief = this.fs.readFile(path.join(outputDir, "company-brief.md"));
+      const gapAnalysis = this.fs.readFile(path.join(outputDir, "gap-analysis.json"));
+      const baseCv = this.fs.readFile(context.baseCvPath);
 
-    const cvPrompt = `You are an expert CV writer specializing in the tech job market.
+      const cvPrompt = `You are an expert CV writer specializing in the tech job market.
 
   Original CV:
   ${baseCv}
@@ -45,10 +46,10 @@ export class WriterAgent extends BaseAgent {
   - Be factual, precise, no fluff
   - Output clean Markdown only. No commentary.`;
 
-    const cvContent = await this.llm.generateText(cvPrompt);
-    const cvPath = this.writeOutput(cvFileName, cvContent, outputDir);
+      const cvContent = await this.llm.generateText(cvPrompt);
+      const cvPath = this.writeOutput(cvFileName, cvContent, outputDir);
 
-    const clPrompt = `You are an expert cover letter writer for the tech job market.
+      const clPrompt = `You are an expert cover letter writer for the tech job market.
 
   Candidate CV:
   ${baseCv}
@@ -68,13 +69,21 @@ export class WriterAgent extends BaseAgent {
   - End with a concrete call to action
   - Output the letter only. No subject line, no commentary.`;
 
-    const clContent = await this.llm.generateText(clPrompt);
-    const clPath = this.writeOutput(clFileName, clContent, outputDir);
+      const clContent = await this.llm.generateText(clPrompt);
+      const clPath = this.writeOutput(clFileName, clContent, outputDir);
 
-    return {
-      agentName: this.agentName,
-      outputFile: cvPath,
-      success: true
-    };
+      return {
+        agentName: this.agentName,
+        outputFile: cvPath,
+        success: true
+      };
+    } catch (error: any) {
+      return {
+        agentName: this.agentName,
+        outputFile: "",
+        success: false,
+        error: error?.message || "Unknown error occurred"
+      };
+    }
   }
 }

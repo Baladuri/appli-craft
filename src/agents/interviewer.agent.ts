@@ -18,14 +18,15 @@ export class InterviewerAgent extends BaseAgent {
    * Generates mock interview prep questions.
    */
   async execute(context: ApplicationContext, outputDir: string): Promise<AgentOutput> {
-    const fileName = "interview-prep.md";
+    try {
+      const fileName = "interview-prep.md";
 
-    const companyBrief = this.fs.readFile(path.join(outputDir, "company-brief.md"));
-    const gapAnalysis = this.fs.readFile(path.join(outputDir, "gap-analysis.json"));
-    const tailoredCv = this.fs.readFile(path.join(outputDir, "cv-tailored.md"));
-    const coverLetter = this.fs.readFile(path.join(outputDir, "cover-letter.md"));
+      const companyBrief = this.fs.readFile(path.join(outputDir, "company-brief.md"));
+      const gapAnalysis = this.fs.readFile(path.join(outputDir, "gap-analysis.json"));
+      const tailoredCv = this.fs.readFile(path.join(outputDir, "cv-tailored.md"));
+      const coverLetter = this.fs.readFile(path.join(outputDir, "cover-letter.md"));
 
-    const prompt = `You are a senior technical interviewer preparing a candidate for a specific interview.
+      const prompt = `You are a senior technical interviewer preparing a candidate for a specific interview.
 
   Company Brief:
   ${companyBrief}
@@ -55,13 +56,21 @@ export class InterviewerAgent extends BaseAgent {
 
   Output only the Markdown. No preamble.`;
 
-    const content = await this.llm.generateText(prompt);
-    const filePath = this.writeOutput(fileName, content, outputDir);
+      const content = await this.llm.generateText(prompt);
+      const filePath = this.writeOutput(fileName, content, outputDir);
 
-    return {
-      agentName: this.agentName,
-      outputFile: filePath,
-      success: true
-    };
+      return {
+        agentName: this.agentName,
+        outputFile: filePath,
+        success: true
+      };
+    } catch (error: any) {
+      return {
+        agentName: this.agentName,
+        outputFile: "",
+        success: false,
+        error: error?.message || "Unknown error occurred"
+      };
+    }
   }
 }

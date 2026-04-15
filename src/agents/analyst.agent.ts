@@ -18,12 +18,13 @@ export class AnalystAgent extends BaseAgent {
    * Generates a mock gap analysis JSON file.
    */
   async execute(context: ApplicationContext, outputDir: string): Promise<AgentOutput> {
-    const fileName = "gap-analysis.json";
+    try {
+      const fileName = "gap-analysis.json";
 
-    const companyBrief = this.fs.readFile(path.join(outputDir, "company-brief.md"));
-    const baseCv = this.fs.readFile(context.baseCvPath);
+      const companyBrief = this.fs.readFile(path.join(outputDir, "company-brief.md"));
+      const baseCv = this.fs.readFile(context.baseCvPath);
 
-    const prompt = `You are a technical recruiter analyzing a candidate's CV against a job opportunity.
+      const prompt = `You are a technical recruiter analyzing a candidate's CV against a job opportunity.
 
   Company Brief:
   ${companyBrief}
@@ -49,15 +50,23 @@ export class AnalystAgent extends BaseAgent {
   - summary must be 2-3 sentences, honest not promotional
   - Output raw JSON only. Any text outside the JSON will break the pipeline.`;
 
-    const parsed: GapAnalysis = await this.llm.generateJSON<GapAnalysis>(prompt);
-    const content = JSON.stringify(parsed, null, 2);
+      const parsed: GapAnalysis = await this.llm.generateJSON<GapAnalysis>(prompt);
+      const content = JSON.stringify(parsed, null, 2);
 
-    const filePath = this.writeOutput(fileName, content, outputDir);
+      const filePath = this.writeOutput(fileName, content, outputDir);
 
-    return {
-      agentName: this.agentName,
-      outputFile: filePath,
-      success: true
-    };
+      return {
+        agentName: this.agentName,
+        outputFile: filePath,
+        success: true
+      };
+    } catch (error: any) {
+      return {
+        agentName: this.agentName,
+        outputFile: "",
+        success: false,
+        error: error?.message || "Unknown error occurred"
+      };
+    }
   }
 }
