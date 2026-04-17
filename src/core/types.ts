@@ -28,7 +28,10 @@ export interface GapAnalysis {
   missingSkills: string[];
   emphasisPoints: string[];
   overallFit: 'strong' | 'moderate' | 'weak';
-  applyDecision: 'yes' | 'maybe' | 'no';
+  applyDecision: 'apply' | 'maybe' | 'skip';
+  confidenceScore: number;
+  skillMatchScore: number;
+  riskFactors: string[];
   summary: string;
 }
 

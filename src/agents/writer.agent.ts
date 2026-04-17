@@ -25,65 +25,107 @@ export class WriterAgent extends BaseAgent {
       const companyBrief = this.fs.readFile(path.join(outputDir, "company-brief.md"));
       const gapAnalysisRaw = this.fs.readFile(path.join(outputDir, "gap-analysis.json"));
       const gapData = JSON.parse(gapAnalysisRaw);
-      const applyDecision = gapData.applyDecision || "unknown";
+      const applyDecision = gapData.applyDecision || "maybe";
       const baseCv = this.fs.readFile(context.baseCvPath);
 
-      const cvPrompt = `You are an expert CV writer specializing in the tech job market.
+      const cvPrompt = `You are an expert CV writer for the role of ${context.role}.
 
-  Original CV:
-  ${baseCv}
+    Original CV:
+    ${baseCv}
 
-  Company Brief:
-  ${companyBrief}
+    Company Brief:
+    ${companyBrief}
 
-  Gap Analysis:
-  ${gapAnalysisRaw}
+    Gap Analysis:
+    ${gapAnalysisRaw}
 
-  IMPORTANT — Apply Decision: "${applyDecision}"
-  If the apply decision is "no":
-  - Do NOT generate a strong application
-  - Be honest about the mismatch
-  - Do NOT try to "sell" the candidate aggressively
-  - Keep minimal tailoring, preserve truth, no exaggeration
+    ---
 
-  Rewrite the CV tailored for this specific role. Rules:
-  - Keep all real experience and dates — never fabricate anything
-  - Reorder bullet points so the most relevant experience appears first
-  - Adjust the profile/summary section to directly address this role
-  - Use the emphasisPoints from the gap analysis to decide what to highlight
-  - Keep the same sections as the original CV
-  - Be factual, precise, no fluff
-  - Output clean Markdown only. No commentary.`;
+    IMPORTANT:
+    Apply Decision: "${applyDecision}"
+
+    ---
+
+    Rewrite the CV tailored for this role.
+
+    Rules:
+
+    GENERAL RULES:
+    - Keep all real experience and dates — never fabricate anything
+    - Do NOT invent technologies or responsibilities
+    - Reorder and emphasize relevant experience
+    - Keep structure identical to original CV
+
+    IF applyDecision = "apply":
+    - Strongly tailor CV toward job match
+    - Emphasize relevant skills and alignment
+
+    IF applyDecision = "maybe":
+    - Balanced CV
+    - Highlight transferable skills
+    - Avoid over-claiming missing stack
+
+    IF applyDecision = "skip":
+    - Minimal tailoring only
+    - Do NOT aggressively position candidate as strong fit
+    - Keep factual and neutral tone
+
+    CONTENT RULES:
+    - Use emphasisPoints from gap analysis
+    - Be precise, technical, and factual
+    - No marketing language
+
+    Output: Markdown only`;
 
       const cvContent = await this.llm.generateText(cvPrompt);
       const cvPath = this.writeOutput(cvFileName, cvContent, outputDir);
 
-      const clPrompt = `You are an expert cover letter writer for the tech job market.
+      const clPrompt = `You are an expert cover letter writer for the role of ${context.role}.
 
-  Candidate CV:
-  ${baseCv}
+    Candidate CV:
+    ${baseCv}
 
-  Company Brief:
-  ${companyBrief}
+    Company Brief:
+    ${companyBrief}
 
-  Gap Analysis:
-  ${gapAnalysisRaw}
+    Gap Analysis:
+    ${gapAnalysisRaw}
 
-  IMPORTANT — Apply Decision: "${applyDecision}"
-  If the apply decision is "no":
-  - Do NOT generate a strong application
-  - Be honest about the mismatch
-  - Do NOT try to "sell" the candidate aggressively
-  - Acknowledge mismatch clearly, position as exploratory or learning-driven application
+    ---
 
-  Write a professional cover letter in English. Rules:
-  - Max 4 paragraphs: hook, relevant experience, why this company specifically, close
-  - Opening must NOT start with "I am excited" or "I am writing to apply"
-  - Reference specific details from the company brief to show research
-  - Address the emphasisPoints naturally — do not list them
-  - Tone: confident, direct, professional — not American-hype
-  - End with a concrete call to action
-  - Output the letter only. No subject line, no commentary.`;
+    IMPORTANT:
+    Apply Decision: "${applyDecision}"
+
+    ---
+
+    Write a professional cover letter.
+
+    Rules:
+
+    IF applyDecision = "apply":
+    - Confident tone
+    - Strong alignment framing
+    - Direct and targeted
+
+    IF applyDecision = "maybe":
+    - Balanced tone
+    - Honest about gaps
+    - Emphasize learning + transferability
+
+    IF applyDecision = "skip":
+    - Short letter (max 2–3 paragraphs)
+    - Honest about mismatch
+    - No attempt to over-sell
+
+    GENERAL RULES:
+    - Max 4 paragraphs
+    - No clichés ("I am excited", "I am passionate")
+    - Must reference real company details
+    - Must use emphasisPoints naturally
+    - No bullet lists
+    - No commentary
+
+    Output only the letter.`;
 
       const clContent = await this.llm.generateText(clPrompt);
       const clPath = this.writeOutput(clFileName, clContent, outputDir);
