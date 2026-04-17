@@ -23,7 +23,9 @@ export class WriterAgent extends BaseAgent {
       const clFileName = "cover-letter.md";
 
       const companyBrief = this.fs.readFile(path.join(outputDir, "company-brief.md"));
-      const gapAnalysis = this.fs.readFile(path.join(outputDir, "gap-analysis.json"));
+      const gapAnalysisRaw = this.fs.readFile(path.join(outputDir, "gap-analysis.json"));
+      const gapData = JSON.parse(gapAnalysisRaw);
+      const applyDecision = gapData.applyDecision || "unknown";
       const baseCv = this.fs.readFile(context.baseCvPath);
 
       const cvPrompt = `You are an expert CV writer specializing in the tech job market.
@@ -35,7 +37,14 @@ export class WriterAgent extends BaseAgent {
   ${companyBrief}
 
   Gap Analysis:
-  ${gapAnalysis}
+  ${gapAnalysisRaw}
+
+  IMPORTANT — Apply Decision: "${applyDecision}"
+  If the apply decision is "no":
+  - Do NOT generate a strong application
+  - Be honest about the mismatch
+  - Do NOT try to "sell" the candidate aggressively
+  - Keep minimal tailoring, preserve truth, no exaggeration
 
   Rewrite the CV tailored for this specific role. Rules:
   - Keep all real experience and dates — never fabricate anything
@@ -58,7 +67,14 @@ export class WriterAgent extends BaseAgent {
   ${companyBrief}
 
   Gap Analysis:
-  ${gapAnalysis}
+  ${gapAnalysisRaw}
+
+  IMPORTANT — Apply Decision: "${applyDecision}"
+  If the apply decision is "no":
+  - Do NOT generate a strong application
+  - Be honest about the mismatch
+  - Do NOT try to "sell" the candidate aggressively
+  - Acknowledge mismatch clearly, position as exploratory or learning-driven application
 
   Write a professional cover letter in English. Rules:
   - Max 4 paragraphs: hook, relevant experience, why this company specifically, close

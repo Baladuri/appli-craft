@@ -11,6 +11,7 @@ export interface Config {
   model: string;
   outputBaseDir: string;
   baseCvPath: string;
+  jobDescriptionPath: string;
 }
 
 export const config: Config = {
@@ -21,6 +22,7 @@ export const config: Config = {
   model: 'claude-sonnet-4-6',
   outputBaseDir: path.resolve('./applications'),
   baseCvPath: path.resolve('./data/base-cv.md'),
+  jobDescriptionPath: path.resolve('./data/job-description.md'),
 };
 
 export function validateConfig() {

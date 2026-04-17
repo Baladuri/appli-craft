@@ -9,6 +9,7 @@ import { WriterAgent } from './agents/writer.agent';
 import { InterviewerAgent } from './agents/interviewer.agent';
 import * as path from 'path';
 import * as fs from 'fs';
+import matter from 'gray-matter';
 
 // ─── Logging Helpers ────────────────────────────────────────────────────────
 
@@ -153,12 +154,14 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<vo
 
 // ─── CLI Entry Point ─────────────────────────────────────────────────────────
 
+const job = matter(fs.readFileSync(config.jobDescriptionPath, 'utf-8'));
+if (!job.data.company || !job.data.role) {
+  throw new Error('Missing company or role in job-description frontmatter');
+}
 const orchConfig: OrchestratorConfig = {
-  company: process.env.COMPANY || 'Example Corp',
-  role: process.env.ROLE || 'Senior Software Engineer',
-  jobDescription: process.env.JOB_DESCRIPTION ||
-    'We are looking for a Senior Software Engineer with strong TypeScript and Node.js skills. ' +
-    'Experience with cloud infrastructure (AWS), REST API design, and CI/CD pipelines is required.',
+  company: job.data.company,
+  role: job.data.role,
+  jobDescription: job.content.trim(),
   baseCvPath: config.baseCvPath,
 };
 

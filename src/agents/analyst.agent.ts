@@ -40,6 +40,7 @@ export class AnalystAgent extends BaseAgent {
     "missingSkills": [],
     "emphasisPoints": [],
     "overallFit": "strong" | "moderate" | "weak",
+    "applyDecision": "yes" | "maybe" | "no",
     "summary": ""
   }
 
@@ -48,7 +49,11 @@ export class AnalystAgent extends BaseAgent {
   - emphasisPoints must be actionable (e.g. "highlight Oracle-to-PostgreSQL migration experience")
   - overallFit: strong = 80%+ requirements met, moderate = 50-79%, weak = below 50%
   - summary must be 2-3 sentences, honest not promotional
-  - Output raw JSON only. Any text outside the JSON will break the pipeline.`;
+  - Output raw JSON only. Any text outside the JSON will break the pipeline.
+  - applyDecision:
+    - "yes" → candidate meets most requirements, realistic chance
+    - "maybe" → some gaps but still plausible with positioning
+    - "no" → missing core requirements or stack mismatch, low probability`;
 
       const parsed: GapAnalysis = await this.llm.generateJSON<GapAnalysis>(prompt);
       const content = JSON.stringify(parsed, null, 2);
