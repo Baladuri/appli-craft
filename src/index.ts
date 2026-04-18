@@ -152,6 +152,24 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<vo
   console.log('');
 }
 
+/**
+ * Executes the AppliCraft pipeline for multiple jobs sequentially.
+ * 
+ * @param configs - Array of OrchestratorConfig
+ */
+export async function runApplicationBatch(configs: OrchestratorConfig[]): Promise<void> {
+  for (const config of configs) {
+    console.log(`\n=== Processing ${config.company} - ${config.role} ===`);
+    try {
+      await runApplication(config);
+    } catch (err: any) {
+      console.error(`  ❌ Failed processing ${config.company}: ${err.message}`);
+      // We continue to the next job in the batch even if one fails
+    }
+    console.log(`=== Done ===\n`);
+  }
+}
+
 // ─── CLI Entry Point ─────────────────────────────────────────────────────────
 
 const job = matter(fs.readFileSync(config.jobDescriptionPath, 'utf-8'));
