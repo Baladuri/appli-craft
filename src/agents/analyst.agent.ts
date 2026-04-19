@@ -51,49 +51,49 @@ export class AnalystAgent extends BaseAgent {
       "missingSkills": string[],
       "emphasisPoints": string[],
       "overallFit": "strong" | "moderate" | "weak",
-
-      "skillMatchScore": number, 
-      "riskFactors": string[],
-
+      "matchScore": number,
+      "decisionConfidence": number,
       "applyDecision": "apply" | "maybe" | "skip",
-      "confidenceScore": number,
-
+      "riskFactors": string[],
       "summary": string
     }
 
     ---
 
-    Rules:
+    Rules for scoring:
 
-    1. matchedSkills:
+    1. matchScore (0–100):
+    - 80–100 → strong match (core stack aligns)
+    - 50–79 → partial match (transferable skills, some gaps)
+    - 0–49 → weak match (core requirements missing)
+
+    2. decisionConfidence (0–100):
+    - High (80–100) → clear decision, strong evidence
+    - Medium (50–79) → some uncertainty
+    - Low (0–49) → unclear or borderline case
+
+    STRICT CONSISTENCY RULES:
+    - matchScore is the absolute SOURCE OF TRUTH.
+    - If matchScore ≥ 80 → overallFit MUST be "strong" AND applyDecision MUST be "apply".
+    - If matchScore 50–79 → overallFit MUST be "moderate" AND applyDecision MUST be "maybe".
+    - If matchScore < 50 → overallFit MUST be "weak" AND applyDecision MUST be "skip".
+    - NEVER adjust matchScore to justify a decision; the decision must follow the score.
+    - decisionConfidence must reflect certainty of the DECISION, not candidate strength.
+    - DO NOT give high decisionConfidence if the situation is ambiguous.
+
+    3. matchedSkills:
     - Only skills explicitly present or clearly demonstrated in CV
 
-    2. missingSkills:
+    4. missingSkills:
     - Must include ONLY critical job requirements missing
 
-    3. emphasisPoints:
+    5. emphasisPoints:
     - Concrete instructions for CV/cover letter optimization
 
-    4. overallFit:
-    - strong = ≥ 75% alignment
-    - moderate = 45–74%
-    - weak = < 45%
-
-    5. skillMatchScore:
-    - 0–100 based ONLY on technical + role alignment
-
     6. riskFactors:
-    - Hard blockers or serious mismatches (e.g. missing core tech stack)
+    - Hard blockers or core tech mismatches justify the score/decision.
 
-    7. applyDecision:
-    - "apply" → strong fit + no critical blockers
-    - "maybe" → some gaps but transferable
-    - "skip" → core mismatch or missing primary stack
-
-    8. confidenceScore:
-    - 0–100 how confident you are in this evaluation
-
-    9. summary:
+    7. summary:
     - 2–3 sentences, honest and non-promotional
 
     ---
@@ -110,8 +110,8 @@ export class AnalystAgent extends BaseAgent {
       // Persist the key decision metrics to a separate file for easier downstream access
       const decision = {
         applyDecision: parsed.applyDecision,
-        confidenceScore: parsed.confidenceScore,
-        skillMatchScore: parsed.skillMatchScore,
+        matchScore: parsed.matchScore,
+        decisionConfidence: parsed.decisionConfidence,
         riskFactors: parsed.riskFactors || []
       };
       this.writeOutput("decision.json", JSON.stringify(decision, null, 2), outputDir);
