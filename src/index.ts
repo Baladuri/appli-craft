@@ -7,6 +7,7 @@ import { ResearcherAgent } from './agents/researcher.agent';
 import { AnalystAgent } from './agents/analyst.agent';
 import { WriterAgent } from './agents/writer.agent';
 import { InterviewerAgent } from './agents/interviewer.agent';
+import { calculateJobScore } from './core/scoring';
 import * as path from 'path';
 import * as fs from 'fs';
 import matter from 'gray-matter';
@@ -114,6 +115,18 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<vo
       logError(analystResult.agentName, 'Analysis', analystResult.error || 'Unknown error');
     }
     logStep(analystResult.agentName, analystResult.outputFile, analystResult.success);
+
+    // Scoring — Deterministic Layer (Orchestrator Responsibility)
+    const gapAnalysisPath = analystResult.outputFile;
+    if (fs.existsSync(gapAnalysisPath)) {
+      const gapData = JSON.parse(fs.readFileSync(gapAnalysisPath, 'utf-8'));
+      const jobId = `${context.company}-${context.role}`.toLowerCase().replace(/\s+/g, '-');
+      const jobScore = calculateJobScore(gapData, jobId);
+      
+      const scorePath = path.join(outputDir, 'job-score.json');
+      fs.writeFileSync(scorePath, JSON.stringify(jobScore, null, 2));
+      console.log(`  📊 Scoring completed → ${path.relative(process.cwd(), scorePath)}`);
+    }
   } catch (err: any) {
     logError('Analyst', 'Analysis', err.message);
   }
