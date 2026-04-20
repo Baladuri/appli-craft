@@ -24,31 +24,10 @@ export class InterviewerAgent extends BaseAgent {
       const companyBrief = this.fs.readFile(path.join(outputDir, "company-brief.md"));
       const gapAnalysisRaw = this.fs.readFile(path.join(outputDir, "gap-analysis.json"));
 
-      // Read decision.json for the applyDecision
-      const decisionRaw = this.fs.readFile(path.join(outputDir, "decision.json"));
-      const decisionData = JSON.parse(decisionRaw);
-      const applyDecision = decisionData.applyDecision || "maybe";
       const tailoredCv = this.fs.readFile(path.join(outputDir, "cv-tailored.md"));
       const coverLetter = this.fs.readFile(path.join(outputDir, "cover-letter.md"));
 
       const prompt = `You are a senior technical interviewer preparing a candidate for a specific interview.
-
-      ---
-
-      IMPORTANT:
-      Apply Decision: "${applyDecision}"
-
-      IF applyDecision = "skip":
-      - Focus on “why not a fit” questions
-      - Expect mismatch challenges
-
-      IF applyDecision = "maybe":
-      - Expect gap-related technical questions
-
-      IF applyDecision = "apply":
-      - Expect deep system design + experience validation questions
-
-      ---
 
       Company Brief:
       ${companyBrief}

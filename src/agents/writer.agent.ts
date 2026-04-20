@@ -25,11 +25,6 @@ export class WriterAgent extends BaseAgent {
       const companyBrief = this.fs.readFile(path.join(outputDir, "company-brief.md"));
       const gapAnalysisRaw = this.fs.readFile(path.join(outputDir, "gap-analysis.json"));
 
-      // Read decision.json for the applyDecision
-      const decisionRaw = this.fs.readFile(path.join(outputDir, "decision.json"));
-      const decisionData = JSON.parse(decisionRaw);
-      const applyDecision = decisionData.applyDecision || "maybe";
-
       const baseCv = this.fs.readFile(context.baseCvPath);
 
       const cvPrompt = `You are an expert CV writer for the role of ${context.role}.
@@ -45,37 +40,16 @@ export class WriterAgent extends BaseAgent {
 
     ---
 
-    IMPORTANT:
-    Apply Decision: "${applyDecision}"
-
-    ---
-
     Rewrite the CV tailored for this role.
 
     Rules:
 
-    GENERAL RULES:
     - Keep all real experience and dates — never fabricate anything
     - Do NOT invent technologies or responsibilities
     - Reorder and emphasize relevant experience
     - Keep structure identical to original CV
-
-    IF applyDecision = "apply":
     - Strongly tailor CV toward job match
     - Emphasize relevant skills and alignment
-
-    IF applyDecision = "maybe":
-    - Balanced CV
-    - Highlight transferable skills
-    - Avoid over-claiming missing stack
-
-    IF applyDecision = "skip":
-    - Minimal tailoring only
-    - Do NOT aggressively position candidate as strong fit
-    - Keep factual and neutral tone
-
-    CONTENT RULES:
-    - Use emphasisPoints from gap analysis
     - Be precise, technical, and factual
     - No marketing language
 
@@ -97,35 +71,16 @@ export class WriterAgent extends BaseAgent {
 
     ---
 
-    IMPORTANT:
-    Apply Decision: "${applyDecision}"
-
-    ---
-
     Write a professional cover letter.
 
     Rules:
 
-    IF applyDecision = "apply":
     - Confident tone
     - Strong alignment framing
     - Direct and targeted
-
-    IF applyDecision = "maybe":
-    - Balanced tone
-    - Honest about gaps
-    - Emphasize learning + transferability
-
-    IF applyDecision = "skip":
-    - Short letter (max 2–3 paragraphs)
-    - Honest about mismatch
-    - No attempt to over-sell
-
-    GENERAL RULES:
     - Max 4 paragraphs
     - No clichés ("I am excited", "I am passionate")
     - Must reference real company details
-    - Must use emphasisPoints naturally
     - No bullet lists
     - No commentary
 
