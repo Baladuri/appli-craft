@@ -47,24 +47,28 @@ DO NOT decide fit.
 Extract the following:
 
 1. requiredSkills:
-- MUST ONLY include:
-  - programming languages (e.g. JavaScript, Ruby)
-  - frameworks (e.g. Rails, Spring Boot)
-  - libraries (e.g. React, Angular)
-  - databases (e.g. PostgreSQL, Redis)
-  - infrastructure/tools (e.g. Docker, Kubernetes, GitHub Actions, Heroku)
-- DO NOT include:
-  - abstract concepts (e.g. "Cloud Infrastructure", "Software Design")
-  - soft skills or vague categories (e.g. "CSS", "Frontend development")
-  - duplicated/generalized terms (e.g. "CI/CD" if already represented as GitHub Actions or Azure Pipelines unless explicitly required)
-- Classify each as:
-  - 'hard' → explicitly required, core stack, or repeated emphasis
-  - 'soft' → nice-to-have or secondary
-  - 'implicit' → ONLY include if explicitly implied in job description text. MUST be technical AND scorable. Avoid broad system-level abstractions.
+- INCLUDE ONLY:
+  - concrete, specific, named skills
+  - technologies, tools, frameworks, platforms
+  - items that can be directly matched with candidateSkills using string normalization
+- EXCLUDE:
+  - abstract concepts (e.g., "Scalable systems design", "Database scaling")
+  - broad domains (e.g., "Cloud Infrastructure", "System architecture")
+  - derived capabilities (e.g., "Containerization", "Infrastructure automation")
+  - behaviors / soft skills (e.g., "Teamwork", "Communication", "Code review")
+  - anything that cannot be matched deterministically via string comparison
+- Classify ONLY by job-context importance:
+  - 'hard' → explicitly required OR clearly central in JD
+  - 'implicit' → supporting tools or less emphasized skills
+  - DO NOT extract soft skills.
+- CRITICAL RULES:
+  - If a skill cannot be matched deterministically later → DO NOT INCLUDE IT.
+  - Prefer missing a skill over including an abstract one.
+  - Keep output strictly actionable for 1:1 simple string matching.
 
 2. candidateSkills:
 - Extract ALL relevant concrete technologies and tools inferred from the CV.
-- DO NOT include overly generic entries (e.g. "Full-stack development", "Systems development", "Backend development"). Keep only concrete technologies and tools.
+- DO NOT list overly generic entries (e.g. "Systems development").
 - Assign confidence:
   - 1.0 → explicitly stated or strong evidence
   - 0.7 → inferred with strong confidence
@@ -73,13 +77,15 @@ Extract the following:
 ---
 
 EXTRACTION GUIDANCE:
-- If a skill is implied (e.g. "built scalable APIs") → infer associated concrete technologies if apparent, but DO NOT infer abstract concepts like "API design".
+- Quality > Quantity. Extraction must be strict and minimal.
+- DO NOT infer too much or expand into abstract concepts.
+- DO NOT list everything mentioned, only decision-relevant, concrete skills.
 - Every skill must be something that can be directly matched or normalized in the scoring layer.
-- Do NOT return empty arrays unless the CV or Job Description is genuinely empty.
+- Do NOT return empty arrays unless the JD or CV is genuinely empty.
 
 RULES:
-- ENFORCE NORMALIZATION: every requiredSkill.name must map to a real technology/tool/framework that can exist in candidateSkills OR be reasonably expected to match via synonym mapping.
-- Normalize skill names (e.g. "Node.js", "NodeJS" → "Node")
+- NORMALIZE naming: prefer canonical names (e.g. "Node.js" → "Node.js", "CI/CD pipelines" → "CI/CD"). Normalize obvious variants to one name but do NOT over-merge unrelated terms.
+- ENFORCE NORMALIZATION: every requiredSkill.name must logically map to a real technology/tool/framework that exists in candidateSkills or synonym mapping.
 - Do NOT invent skills
 - Do NOT compare CV vs JD
 - Do NOT calculate match
