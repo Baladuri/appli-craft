@@ -235,6 +235,44 @@ export async function runApplicationBatch(configs: OrchestratorConfig[]): Promis
     }
     console.log(`=== Done ===\n`);
   }
+  generateJobRankings();
+}
+
+// ─── Ranking Aggregation ──────────────────────────────────────────────────────
+
+function generateJobRankings(): void {
+  const applicationsDir = config.outputBaseDir;
+  if (!fs.existsSync(applicationsDir)) return;
+
+  const map = new Map<string, { jobId: string; score: number; decision: string }>();
+
+  const entries = fs.readdirSync(applicationsDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const scorePath = path.join(applicationsDir, entry.name, 'job-score.json');
+      if (fs.existsSync(scorePath)) {
+        try {
+          const scoreData = JSON.parse(fs.readFileSync(scorePath, 'utf-8'));
+          if (scoreData.jobId && typeof scoreData.score === 'number' && scoreData.decision) {
+            map.set(scoreData.jobId, {
+              jobId: scoreData.jobId,
+              score: scoreData.score,
+              decision: scoreData.decision
+            });
+          }
+        } catch (e) {
+          // ignore parsing errors
+        }
+      }
+    }
+  }
+
+  const rankings = Array.from(map.values());
+  rankings.sort((a, b) => b.score - a.score);
+
+  const rankingsPath = path.join(applicationsDir, 'job-rankings.json');
+  fs.writeFileSync(rankingsPath, JSON.stringify(rankings, null, 2));
+  console.log(`  🏆 Rankings updated → ${path.relative(process.cwd(), rankingsPath)}`);
 }
 
 // ─── CLI Entry Point ─────────────────────────────────────────────────────────
@@ -250,7 +288,9 @@ const orchConfig: OrchestratorConfig = {
   baseCvPath: config.baseCvPath,
 };
 
-runApplication(orchConfig).catch((err) => {
+runApplication(orchConfig).then(() => {
+  generateJobRankings();
+}).catch((err) => {
   console.error('\n💥 Fatal pipeline error:', err.message);
   process.exit(1);
 });
