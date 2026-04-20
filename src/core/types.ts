@@ -24,15 +24,13 @@ export interface GitHubRepo {
 }
 
 export interface GapAnalysis {
-  matchedSkills: string[];
-  missingSkills: string[];
-  emphasisPoints: string[];
-  overallFit: 'strong' | 'moderate' | 'weak';
-  applyDecision: 'apply' | 'maybe' | 'skip';
-  matchScore: number;
-  decisionConfidence: number;
-  riskFactors: string[];
-  summary: string;
+  requiredSkills: { name: string; type: "hard" | "soft" | "implicit" }[];
+  candidateSkills: { name: string; confidence: number }[];
+}
+
+export interface ApplicationDecision {
+  applyDecision: "apply" | "maybe" | "skip";
+  hardCoverage: number;
 }
 
 export interface OrchestratorConfig {

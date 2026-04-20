@@ -53,17 +53,20 @@ export class ClaudeClient {
    */
   async generateJSON<T>(prompt: string): Promise<T> {
     if (this.mockMode) {
-      if (prompt.includes('Recruiter') || prompt.includes('fit evaluator')) {
+      if (prompt.includes('information extraction system')) {
         return {
-          matchedSkills: [],
-          missingSkills: [],
-          emphasisPoints: [],
-          overallFit: "moderate",
-          matchScore: 50,
-          decisionConfidence: 50,
-          applyDecision: "maybe",
-          riskFactors: [],
-          summary: "Mock analysis output for testing pipeline"
+          requiredSkills: [
+            { name: "Node.js", type: "hard" },
+            { name: "TypeScript", type: "hard" },
+            { name: "React", type: "hard" },
+            { name: "Python", type: "soft" }
+          ],
+          candidateSkills: [
+            { name: "Node.js", confidence: 1.0 },
+            { name: "TypeScript", confidence: 0.9 },
+            { name: "React", confidence: 0.8 },
+            { name: "AWS", confidence: 0.7 }
+          ]
         } as unknown as T;
       }
       return {} as T;

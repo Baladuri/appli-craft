@@ -24,8 +24,12 @@ export class WriterAgent extends BaseAgent {
 
       const companyBrief = this.fs.readFile(path.join(outputDir, "company-brief.md"));
       const gapAnalysisRaw = this.fs.readFile(path.join(outputDir, "gap-analysis.json"));
-      const gapData = JSON.parse(gapAnalysisRaw);
-      const applyDecision = gapData.applyDecision || "maybe";
+
+      // Read decision.json for the applyDecision
+      const decisionRaw = this.fs.readFile(path.join(outputDir, "decision.json"));
+      const decisionData = JSON.parse(decisionRaw);
+      const applyDecision = decisionData.applyDecision || "maybe";
+
       const baseCv = this.fs.readFile(context.baseCvPath);
 
       const cvPrompt = `You are an expert CV writer for the role of ${context.role}.

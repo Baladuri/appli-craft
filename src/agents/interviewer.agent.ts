@@ -23,8 +23,11 @@ export class InterviewerAgent extends BaseAgent {
 
       const companyBrief = this.fs.readFile(path.join(outputDir, "company-brief.md"));
       const gapAnalysisRaw = this.fs.readFile(path.join(outputDir, "gap-analysis.json"));
-      const gapData = JSON.parse(gapAnalysisRaw);
-      const applyDecision = gapData.applyDecision || "maybe";
+
+      // Read decision.json for the applyDecision
+      const decisionRaw = this.fs.readFile(path.join(outputDir, "decision.json"));
+      const decisionData = JSON.parse(decisionRaw);
+      const applyDecision = decisionData.applyDecision || "maybe";
       const tailoredCv = this.fs.readFile(path.join(outputDir, "cv-tailored.md"));
       const coverLetter = this.fs.readFile(path.join(outputDir, "cover-letter.md"));
 

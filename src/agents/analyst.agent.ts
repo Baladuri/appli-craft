@@ -25,96 +25,104 @@ export class AnalystAgent extends BaseAgent {
       const baseCv = this.fs.readFile(context.baseCvPath);
       const jobDescription = context.jobDescription;
 
-      const prompt = `You are a technical recruiter and job fit evaluator.
+      const prompt = `You are an information extraction system.
 
-    Your task is to analyze a candidate CV against a job description and produce a structured evaluation used for downstream decision making.
+Your job is to extract structured data from:
+- a job description
+- a candidate CV
 
-    ---
+Job Description:
+${jobDescription}
 
-    Company Brief:
-    ${companyBrief}
+Candidate CV:
+${baseCv}
 
-    Candidate CV:
-    ${baseCv}
+DO NOT evaluate.
+DO NOT score.
+DO NOT give opinions.
+DO NOT decide fit.
 
-    Job Description:
-    ${jobDescription}
+---
 
-    ---
+Extract the following:
 
-    Return ONLY a raw JSON object. No markdown, no explanation.
+1. requiredSkills:
+- MUST ONLY include:
+  - programming languages (e.g. JavaScript, Ruby)
+  - frameworks (e.g. Rails, Spring Boot)
+  - libraries (e.g. React, Angular)
+  - databases (e.g. PostgreSQL, Redis)
+  - infrastructure/tools (e.g. Docker, Kubernetes, GitHub Actions, Heroku)
+- DO NOT include:
+  - abstract concepts (e.g. "Cloud Infrastructure", "Software Design")
+  - soft skills or vague categories (e.g. "CSS", "Frontend development")
+  - duplicated/generalized terms (e.g. "CI/CD" if already represented as GitHub Actions or Azure Pipelines unless explicitly required)
+- Classify each as:
+  - 'hard' → explicitly required, core stack, or repeated emphasis
+  - 'soft' → nice-to-have or secondary
+  - 'implicit' → ONLY include if explicitly implied in job description text. MUST be technical AND scorable. Avoid broad system-level abstractions.
 
-    The JSON must match exactly:
+2. candidateSkills:
+- Extract ALL relevant concrete technologies and tools inferred from the CV.
+- DO NOT include overly generic entries (e.g. "Full-stack development", "Systems development", "Backend development"). Keep only concrete technologies and tools.
+- Assign confidence:
+  - 1.0 → explicitly stated or strong evidence
+  - 0.7 → inferred with strong confidence
+  - 0.4 → weak or indirect signal
 
-    {
-      "matchedSkills": string[],
-      "missingSkills": string[],
-      "emphasisPoints": string[],
-      "overallFit": "strong" | "moderate" | "weak",
-      "matchScore": number,
-      "decisionConfidence": number,
-      "applyDecision": "apply" | "maybe" | "skip",
-      "riskFactors": string[],
-      "summary": string
-    }
+---
 
-    ---
+EXTRACTION GUIDANCE:
+- If a skill is implied (e.g. "built scalable APIs") → infer associated concrete technologies if apparent, but DO NOT infer abstract concepts like "API design".
+- Every skill must be something that can be directly matched or normalized in the scoring layer.
+- Do NOT return empty arrays unless the CV or Job Description is genuinely empty.
 
-    Rules for scoring:
+RULES:
+- ENFORCE NORMALIZATION: every requiredSkill.name must map to a real technology/tool/framework that can exist in candidateSkills OR be reasonably expected to match via synonym mapping.
+- Normalize skill names (e.g. "Node.js", "NodeJS" → "Node")
+- Do NOT invent skills
+- Do NOT compare CV vs JD
+- Do NOT calculate match
+- Do NOT include explanations
 
-    1. matchScore (0–100):
-    - 80–100 → strong match (core stack aligns)
-    - 50–79 → partial match (transferable skills, some gaps)
-    - 0–49 → weak match (core requirements missing)
+---
 
-    2. decisionConfidence (0–100):
-    - High (80–100) → clear decision, strong evidence
-    - Medium (50–79) → some uncertainty
-    - Low (0–49) → unclear or borderline case
+EXAMPLE:
+Job: "Experience with Node.js and Docker"
+CV: "Built backend services using Node.js and containerized apps"
 
-    STRICT CONSISTENCY RULES:
-    - matchScore is the absolute SOURCE OF TRUTH.
-    - If matchScore ≥ 80 → overallFit MUST be "strong" AND applyDecision MUST be "apply".
-    - If matchScore 50–79 → overallFit MUST be "moderate" AND applyDecision MUST be "maybe".
-    - If matchScore < 50 → overallFit MUST be "weak" AND applyDecision MUST be "skip".
-    - NEVER adjust matchScore to justify a decision; the decision must follow the score.
-    - decisionConfidence must reflect certainty of the DECISION, not candidate strength.
-    - DO NOT give high decisionConfidence if the situation is ambiguous.
+Output:
+{
+  "requiredSkills": [
+    { "name": "Node.js", "type": "hard" },
+    { "name": "Docker", "type": "hard" }
+  ],
+  "candidateSkills": [
+    { "name": "Node.js", "confidence": 1.0 },
+    { "name": "Docker", "confidence": 0.7 },
+    { "name": "Backend development", "confidence": 0.7 },
+    { "name": "Containerization", "confidence": 1.0 }
+  ]
+}
 
-    3. matchedSkills:
-    - Only skills explicitly present or clearly demonstrated in CV
+---
 
-    4. missingSkills:
-    - Must include ONLY critical job requirements missing
+Output ONLY valid JSON in this format:
 
-    5. emphasisPoints:
-    - Concrete instructions for CV/cover letter optimization
-
-    6. riskFactors:
-    - Hard blockers or core tech mismatches justify the score/decision.
-
-    7. summary:
-    - 2–3 sentences, honest and non-promotional
-
-    ---
-
-    Hard rule:
-    Do NOT optimize candidate chances artificially.
-    Be strictly honest and conservative in scoring.`;
+{
+  "requiredSkills": [
+    { "name": "string", "type": "hard" | "soft" | "implicit" }
+  ],
+  "candidateSkills": [
+    { "name": "string", "confidence": number }
+  ]
+}
+`;
 
       const parsed: GapAnalysis = await this.llm.generateJSON<GapAnalysis>(prompt);
       const content = JSON.stringify(parsed, null, 2);
 
       const filePath = this.writeOutput(fileName, content, outputDir);
-
-      // Persist the key decision metrics to a separate file for easier downstream access
-      const decision = {
-        applyDecision: parsed.applyDecision,
-        matchScore: parsed.matchScore,
-        decisionConfidence: parsed.decisionConfidence,
-        riskFactors: parsed.riskFactors || []
-      };
-      this.writeOutput("decision.json", JSON.stringify(decision, null, 2), outputDir);
 
       return {
         agentName: this.agentName,

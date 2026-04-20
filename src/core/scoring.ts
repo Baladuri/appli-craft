@@ -6,22 +6,8 @@ export interface JobScore {
   decision: "apply" | "maybe" | "skip";
 }
 
-/**
- * Deterministically calculates a job score based on gap analysis metrics.
- * 
- * Formula:
- * score = gap.matchScore - (gap.riskFactors.length * 5) + (gap.decisionConfidence * 0.1)
- * 
- * Clamped between 0 and 100.
- */
-export function calculateJobScore(gap: GapAnalysis, jobId: string): JobScore {
-  const riskPenalty = gap.riskFactors.length * 5;
-  const confidenceBonus = gap.decisionConfidence * 0.1;
-
-  let score = gap.matchScore - riskPenalty + confidenceBonus;
-
-  // Clamp score between 0 and 100
-  score = Math.max(0, Math.min(100, score));
+export function calculateJobScore(jobId: string, hardCoverage: number): JobScore {
+  const score = parseFloat((hardCoverage * 100).toFixed(2));
 
   // Decision mapping
   let decision: "apply" | "maybe" | "skip";
@@ -35,7 +21,7 @@ export function calculateJobScore(gap: GapAnalysis, jobId: string): JobScore {
 
   return {
     jobId,
-    score: parseFloat(score.toFixed(2)), // Keep two decimal places for precision
+    score,
     decision
   };
 }

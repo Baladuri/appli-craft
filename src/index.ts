@@ -12,6 +12,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 import matter from 'gray-matter';
 
+// ─── Scoring Helpers ────────────────────────────────────────────────────────
+function normalize(skill: string): string {
+  return skill.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 // ─── Logging Helpers ────────────────────────────────────────────────────────
 
 function logStep(agentName: string, outputFile: string, success: boolean): void {
@@ -120,8 +125,44 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<vo
     const gapAnalysisPath = analystResult.outputFile;
     if (fs.existsSync(gapAnalysisPath)) {
       const gapData = JSON.parse(fs.readFileSync(gapAnalysisPath, 'utf-8'));
+      
+      // Calculate hardCoverage
+      const hardSkills = (gapData.requiredSkills || []).filter((s: any) => s.type === 'hard');
+      const uniqueHardSkills = Array.from(
+        new Map(hardSkills.map((s: any) => [normalize(s.name), s])).values()
+      );
+
+      let matchedHardCount = 0;
+      const candidateSkills = gapData.candidateSkills || [];
+
+      if (uniqueHardSkills.length > 0) {
+        matchedHardCount = uniqueHardSkills.filter((required: any) => 
+          candidateSkills.some((candidate: any) => 
+            normalize(candidate.name) === normalize(required.name) && candidate.confidence >= 0.6
+          )
+        ).length;
+      }
+
+      const hardCoverage = uniqueHardSkills.length === 0 ? 0 : matchedHardCount / uniqueHardSkills.length;
+      
+      // Map to applyDecision
+      let applyDecision: "apply" | "maybe" | "skip";
+      if (hardCoverage >= 0.8) applyDecision = "apply";
+      else if (hardCoverage >= 0.5) applyDecision = "maybe";
+      else applyDecision = "skip";
+
+      // Write decision.json
+      const decisionContent = {
+        applyDecision,
+        hardCoverage: parseFloat(hardCoverage.toFixed(2))
+      };
+      const decisionPath = path.join(outputDir, 'decision.json');
+      fs.writeFileSync(decisionPath, JSON.stringify(decisionContent, null, 2));
+      console.log(`  ⚖️  Decision reached: ${applyDecision} (Coverage: ${decisionContent.hardCoverage})`);
+
+      // Calculate and write job-score.json
       const jobId = `${context.company}-${context.role}`.toLowerCase().replace(/\s+/g, '-');
-      const jobScore = calculateJobScore(gapData, jobId);
+      const jobScore = calculateJobScore(jobId, hardCoverage);
       
       const scorePath = path.join(outputDir, 'job-score.json');
       fs.writeFileSync(scorePath, JSON.stringify(jobScore, null, 2));
@@ -131,28 +172,41 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<vo
     logError('Analyst', 'Analysis', err.message);
   }
 
-  // Stage 3 — Writer
-  let writerResult;
-  try {
-    writerResult = await writer.execute(context, outputDir);
-    if (!writerResult.success) {
-      logError(writerResult.agentName, 'Writing', writerResult.error || 'Unknown error');
+  // ── Step 6.5: Execution Control ───────────────────────────────────────────
+  let skipDownstream = false;
+  const decisionPath = path.join(outputDir, 'decision.json');
+  if (fs.existsSync(decisionPath)) {
+    const decisionData = JSON.parse(fs.readFileSync(decisionPath, 'utf-8'));
+    if (decisionData.applyDecision === 'skip') {
+      console.log('  ⏭  Skipping Writer & Interviewer (decision = skip)');
+      skipDownstream = true;
     }
-    logStep(writerResult.agentName, writerResult.outputFile, writerResult.success);
-  } catch (err: any) {
-    logError('Writer', 'Writing', err.message);
   }
 
-  // Stage 4 — Interviewer
-  let interviewResult;
-  try {
-    interviewResult = await interviewer.execute(context, outputDir);
-    if (!interviewResult.success) {
-      logError(interviewResult.agentName, 'Interview Prep', interviewResult.error || 'Unknown error');
+  if (!skipDownstream) {
+    // Stage 3 — Writer
+    let writerResult;
+    try {
+      writerResult = await writer.execute(context, outputDir);
+      if (!writerResult.success) {
+        logError(writerResult.agentName, 'Writing', writerResult.error || 'Unknown error');
+      }
+      logStep(writerResult.agentName, writerResult.outputFile, writerResult.success);
+    } catch (err: any) {
+      logError('Writer', 'Writing', err.message);
     }
-    logStep(interviewResult.agentName, interviewResult.outputFile, interviewResult.success);
-  } catch (err: any) {
-    logError('Interviewer', 'Interview Prep', err.message);
+
+    // Stage 4 — Interviewer
+    let interviewResult;
+    try {
+      interviewResult = await interviewer.execute(context, outputDir);
+      if (!interviewResult.success) {
+        logError(interviewResult.agentName, 'Interview Prep', interviewResult.error || 'Unknown error');
+      }
+      logStep(interviewResult.agentName, interviewResult.outputFile, interviewResult.success);
+    } catch (err: any) {
+      logError('Interviewer', 'Interview Prep', err.message);
+    }
   }
 
   // ── Step 7: Summary ───────────────────────────────────────────────────────
