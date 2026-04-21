@@ -121,29 +121,95 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<vo
     }
     logStep(analystResult.agentName, analystResult.outputFile, analystResult.success);
 
-    // Scoring — Deterministic Layer (Orchestrator Responsibility)
+    // ── Layer 2: Gap Engine — Hybrid Matching ─────────────────────────────────
     const gapAnalysisPath = analystResult.outputFile;
     if (fs.existsSync(gapAnalysisPath)) {
       const gapData = JSON.parse(fs.readFileSync(gapAnalysisPath, 'utf-8'));
       
-      // Calculate hardCoverage
+      // Filter and deduplicate hard skills
       const hardSkills = (gapData.requiredSkills || []).filter((s: any) => s.type === 'hard');
       const uniqueHardSkills = Array.from(
         new Map(hardSkills.map((s: any) => [normalize(s.name), s])).values()
       );
 
-      let matchedHardCount = 0;
-      const candidateSkills = gapData.candidateSkills || [];
+      const candidateSkills = (gapData.candidateSkills || []).filter((c: any) => c.confidence >= 0.6);
+      let totalMatchedScore = 0;
 
-      if (uniqueHardSkills.length > 0) {
-        matchedHardCount = uniqueHardSkills.filter((required: any) => 
-          candidateSkills.some((candidate: any) => 
-            normalize(candidate.name) === normalize(required.name) && candidate.confidence >= 0.6
-          )
-        ).length;
+      console.log(`\n  🔍 Gap Engine: Matching ${uniqueHardSkills.length} hard skills...\n`);
+
+      for (const required of uniqueHardSkills as any[]) {
+        // Step A — Fast path: exact normalized match
+        const exactMatch = candidateSkills.find((c: any) =>
+          normalize(c.name) === normalize(required.name)
+        );
+
+        if (exactMatch) {
+          totalMatchedScore += 1;
+          console.log(`     ✓ ${required.name} → ${exactMatch.name} (exact, score: 1)`);
+          continue;
+        }
+
+        // Step B — Semantic path: pairwise LLM comparison
+        let bestMatch: { match: string; confidence: number; candidateName: string } = {
+          match: "none", confidence: 0, candidateName: ""
+        };
+
+        for (const candidate of candidateSkills as any[]) {
+          try {
+            const semanticPrompt = `You are a semantic skill comparison system.
+
+Compare these two skills and determine if the candidate skill satisfies the required skill.
+
+Required skill: "${required.name}"
+Candidate skill: "${candidate.name}"
+
+Definitions:
+- "full" → interchangeable or directly substitutable (e.g. same tool, direct equivalent)
+- "partial" → strong overlap or directly supportive. The candidate skill would meaningfully help perform the required skill in a real-world job.
+- "none" → different responsibility or weak relation
+
+DO NOT return "partial" for:
+- same domain but different tools (e.g. Redis vs MySQL)
+- vague conceptual similarity (e.g. Docker vs Kubernetes)
+- indirect or weak relationships
+
+The decision must reflect real-world usability, not theoretical similarity.
+If unsure, return "none".
+DO NOT compute scores, coverage, or make application decisions.
+
+Respond ONLY with valid JSON:
+{
+  "match": "full" | "partial" | "none",
+  "confidence": number between 0 and 1
+}`;
+
+            const result = await llmClient.generateJSON<{ match: string; confidence: number }>(semanticPrompt);
+
+            if (result.confidence > bestMatch.confidence && result.match !== "none") {
+              bestMatch = {
+                match: result.match,
+                confidence: result.confidence,
+                candidateName: candidate.name
+              };
+            }
+          } catch (e) {
+            // Skip failed comparisons silently
+          }
+        }
+
+        // Score the best semantic match
+        if (bestMatch.match === "full") {
+          totalMatchedScore += 1;
+          console.log(`     ≈ ${required.name} → ${bestMatch.candidateName} (semantic full, score: 1)`);
+        } else if (bestMatch.match === "partial") {
+          totalMatchedScore += 0.5;
+          console.log(`     ~ ${required.name} → ${bestMatch.candidateName} (semantic partial, score: 0.5)`);
+        } else {
+          console.log(`     ✗ ${required.name} → no match (score: 0)`);
+        }
       }
 
-      const hardCoverage = uniqueHardSkills.length === 0 ? 0 : matchedHardCount / uniqueHardSkills.length;
+      const hardCoverage = uniqueHardSkills.length === 0 ? 0 : totalMatchedScore / uniqueHardSkills.length;
       
       // Map to applyDecision
       let applyDecision: "apply" | "maybe" | "skip";
@@ -156,9 +222,9 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<vo
         applyDecision,
         hardCoverage: parseFloat(hardCoverage.toFixed(2))
       };
-      const decisionPath = path.join(outputDir, 'decision.json');
-      fs.writeFileSync(decisionPath, JSON.stringify(decisionContent, null, 2));
-      console.log(`  ⚖️  Decision reached: ${applyDecision} (Coverage: ${decisionContent.hardCoverage})`);
+      const decisionWritePath = path.join(outputDir, 'decision.json');
+      fs.writeFileSync(decisionWritePath, JSON.stringify(decisionContent, null, 2));
+      console.log(`\n  ⚖️  Decision reached: ${applyDecision} (Coverage: ${decisionContent.hardCoverage})`);
 
       // Calculate and write job-score.json
       const jobId = `${context.company}-${context.role}`.toLowerCase().replace(/\s+/g, '-');

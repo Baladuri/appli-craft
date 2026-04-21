@@ -33,6 +33,11 @@ export interface ApplicationDecision {
   hardCoverage: number;
 }
 
+export interface SemanticMatch {
+  match: "full" | "partial" | "none";
+  confidence: number;
+}
+
 export interface OrchestratorConfig {
   jobDescription: string;
   company: string;

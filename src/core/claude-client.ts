@@ -70,6 +70,12 @@ export class ClaudeClient {
           ]
         } as unknown as T;
       }
+      if (prompt.includes('semantic skill comparison')) {
+        return {
+          match: "none",
+          confidence: 0
+        } as unknown as T;
+      }
       return {} as T;
     }
 
