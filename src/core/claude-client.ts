@@ -57,10 +57,10 @@ export class ClaudeClient {
       if (prompt.includes('information extraction system')) {
         return {
           requiredSkills: [
-            { name: "Node.js", type: "hard" },
-            { name: "TypeScript", type: "hard" },
-            { name: "React", type: "hard" },
-            { name: "Python", type: "soft" }
+            { name: "Node.js", type: "hard", evidence: "Must have experience with Node.js" },
+            { name: "TypeScript", type: "hard", evidence: "Knowledge of TypeScript is preferred" },
+            { name: "React", type: "hard", evidence: "React is essential" },
+            { name: "Python", type: "soft", evidence: "Ideally with Python" }
           ],
           candidateSkills: [
             { name: "Node.js", confidence: 1.0 },

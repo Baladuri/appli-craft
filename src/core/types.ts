@@ -23,8 +23,15 @@ export interface GitHubRepo {
   topics: string[];
 }
 
+export interface JobSkill {
+  name: string;
+  type: "hard" | "soft" | "implicit";
+  requirement: "required" | "preferred" | "implicit";
+  evidence: string;
+}
+
 export interface GapAnalysis {
-  requiredSkills: { name: string; type: "hard" | "soft" | "implicit" }[];
+  requiredSkills: JobSkill[];
   candidateSkills: { name: string; confidence: number }[];
 }
 

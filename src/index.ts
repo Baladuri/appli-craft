@@ -125,7 +125,7 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<vo
     const gapAnalysisPath = analystResult.outputFile;
     if (fs.existsSync(gapAnalysisPath)) {
       const gapData = JSON.parse(fs.readFileSync(gapAnalysisPath, 'utf-8'));
-      
+
       // Filter and deduplicate hard skills
       const hardSkills = (gapData.requiredSkills || []).filter((s: any) => s.type === 'hard');
       const uniqueHardSkills = Array.from(
@@ -163,19 +163,12 @@ Compare these two skills and determine if the candidate skill satisfies the requ
 Required skill: "${required.name}"
 Candidate skill: "${candidate.name}"
 
-Definitions:
-- "full" → interchangeable or directly substitutable (e.g. same tool, direct equivalent)
-- "partial" → strong overlap or directly supportive. The candidate skill would meaningfully help perform the required skill in a real-world job.
-- "none" → different responsibility or weak relation
-
-DO NOT return "partial" for:
-- same domain but different tools (e.g. Redis vs MySQL)
-- vague conceptual similarity (e.g. Docker vs Kubernetes)
-- indirect or weak relationships
-
-The decision must reflect real-world usability, not theoretical similarity.
-If unsure, return "none".
-DO NOT compute scores, coverage, or make application decisions.
+Rules:
+- "full" → the candidate skill fully satisfies the requirement (e.g. same technology, direct equivalent)
+- "partial" → the candidate skill partially covers the requirement (e.g. related framework, overlapping domain)
+- "none" → no meaningful relationship
+- Be strict but fair. If unsure, return "none".
+- DO NOT compute scores, coverage, or make application decisions.
 
 Respond ONLY with valid JSON:
 {
@@ -210,7 +203,7 @@ Respond ONLY with valid JSON:
       }
 
       const hardCoverage = uniqueHardSkills.length === 0 ? 0 : totalMatchedScore / uniqueHardSkills.length;
-      
+
       // Map to applyDecision
       let applyDecision: "apply" | "maybe" | "skip";
       if (hardCoverage >= 0.8) applyDecision = "apply";
@@ -229,7 +222,7 @@ Respond ONLY with valid JSON:
       // Calculate and write job-score.json
       const jobId = `${context.company}-${context.role}`.toLowerCase().replace(/\s+/g, '-');
       const jobScore = calculateJobScore(jobId, hardCoverage);
-      
+
       const scorePath = path.join(outputDir, 'job-score.json');
       fs.writeFileSync(scorePath, JSON.stringify(jobScore, null, 2));
       console.log(`  📊 Scoring completed → ${path.relative(process.cwd(), scorePath)}`);

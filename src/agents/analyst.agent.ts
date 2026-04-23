@@ -1,7 +1,7 @@
 import { BaseAgent } from './base-agent';
 import { FileSystemManager } from '../core/fs-manager';
 import { ClaudeClient } from '../core/claude-client';
-import { ApplicationContext, AgentOutput, GapAnalysis } from '../core/types';
+import { ApplicationContext, AgentOutput, GapAnalysis, JobSkill } from '../core/types';
 import * as path from 'path';
 
 /**
@@ -14,22 +14,18 @@ export class AnalystAgent extends BaseAgent {
   }
 
   /**
-   * Stub execution method for Analyst agent.
-   * Generates a mock gap analysis JSON file.
+   * Hardened execution method for Analyst agent.
+   * Extracts skills and performs deterministic classification in code.
    */
   async execute(context: ApplicationContext, outputDir: string): Promise<AgentOutput> {
     try {
       const fileName = "gap-analysis.json";
-
-      const companyBrief = this.fs.readFile(path.join(outputDir, "company-brief.md"));
       const baseCv = this.fs.readFile(context.baseCvPath);
       const jobDescription = context.jobDescription;
 
       const prompt = `You are an information extraction system.
 
-Your job is to extract structured data from:
-- a job description
-- a candidate CV
+Your job is to extract technical skills from a job description and a candidate's CV as structured data.
 
 Job Description:
 ${jobDescription}
@@ -37,79 +33,28 @@ ${jobDescription}
 Candidate CV:
 ${baseCv}
 
-DO NOT evaluate.
-DO NOT score.
-DO NOT give opinions.
-DO NOT decide fit.
+---
+
+### INSTRUCTIONS FOR REQUIRED SKILLS EXTRACTION
+
+Extract ONLY concrete technical skills, tools, frameworks, and technologies from the Job Description.
+
+For each skill, you MUST provide:
+1. "name": The canonical name of the technology.
+2. "type": One of "hard" | "soft" | "implicit".
+3. "evidence": The SMALLEST meaningful phrase from the text that directly contains the skill.
+
+### EXCLUSION RULES:
+- DO NOT extract abstract concepts (e.g., "Scalable systems design").
+- DO NOT extract soft skills or behaviors (e.g., "Teamwork", "Communication").
+- DO NOT extract responsibility-based phrases (e.g., "Agile environment").
 
 ---
 
-Extract the following:
+### INSTRUCTIONS FOR CANDIDATE SKILLS EXTRACTION
 
-1. requiredSkills:
-- INCLUDE ONLY:
-  - concrete, specific, named skills
-  - technologies, tools, frameworks, platforms
-  - items that can be directly matched with candidateSkills using string normalization
-- EXCLUDE:
-  - abstract concepts (e.g., "Scalable systems design", "Database scaling")
-  - broad domains (e.g., "Cloud Infrastructure", "System architecture")
-  - derived capabilities (e.g., "Containerization", "Infrastructure automation")
-  - behaviors / soft skills (e.g., "Teamwork", "Communication", "Code review")
-  - anything that cannot be matched deterministically via string comparison
-- Classify ONLY by job-context importance:
-  - 'hard' → explicitly required OR clearly central in JD
-  - 'implicit' → supporting tools or less emphasized skills
-  - DO NOT extract soft skills.
-- CRITICAL RULES:
-  - If a skill cannot be matched deterministically later → DO NOT INCLUDE IT.
-  - Prefer missing a skill over including an abstract one.
-  - Keep output strictly actionable for 1:1 simple string matching.
-
-2. candidateSkills:
-- Extract ALL relevant concrete technologies and tools inferred from the CV.
-- DO NOT list overly generic entries (e.g. "Systems development").
-- Assign confidence:
-  - 1.0 → explicitly stated or strong evidence
-  - 0.7 → inferred with strong confidence
-  - 0.4 → weak or indirect signal
-
----
-
-EXTRACTION GUIDANCE:
-- Quality > Quantity. Extraction must be strict and minimal.
-- DO NOT infer too much or expand into abstract concepts.
-- DO NOT list everything mentioned, only decision-relevant, concrete skills.
-- Every skill must be something that can be directly matched or normalized in the scoring layer.
-- Do NOT return empty arrays unless the JD or CV is genuinely empty.
-
-RULES:
-- NORMALIZE naming: prefer canonical names (e.g. "Node.js" → "Node.js", "CI/CD pipelines" → "CI/CD"). Normalize obvious variants to one name but do NOT over-merge unrelated terms.
-- ENFORCE NORMALIZATION: every requiredSkill.name must logically map to a real technology/tool/framework that exists in candidateSkills or synonym mapping.
-- Do NOT invent skills
-- Do NOT compare CV vs JD
-- Do NOT calculate match
-- Do NOT include explanations
-
----
-
-EXAMPLE:
-Job: "Experience with Node.js and Docker"
-CV: "Built backend services using Node.js and containerized apps"
-
-Output:
-{
-  "requiredSkills": [
-    { "name": "Node.js", "type": "hard" },
-    { "name": "Docker", "type": "hard" }
-  ],
-  "candidateSkills": [
-    { "name": "Node.js", "confidence": 1.0 },
-    { "name": "Docker", "confidence": 0.7 },
-    { "name": "Backend development", "confidence": 0.7 },
-    { "name": "Containerization", "confidence": 1.0 }
-  ]
-}
+Extract all relevant concrete technologies and tools from the CV.
+Assign confidence (1.0 for explicit, 0.7 for inferred, 0.4 for weak signal).
 
 ---
 
@@ -117,7 +62,7 @@ Output ONLY valid JSON in this format:
 
 {
   "requiredSkills": [
-    { "name": "string", "type": "hard" | "soft" | "implicit" }
+    { "name": "string", "type": "hard" | "soft" | "implicit", "evidence": "string" }
   ],
   "candidateSkills": [
     { "name": "string", "confidence": number }
@@ -125,9 +70,24 @@ Output ONLY valid JSON in this format:
 }
 `;
 
-      const parsed: GapAnalysis = await this.llm.generateJSON<GapAnalysis>(prompt);
-      const content = JSON.stringify(parsed, null, 2);
+      const rawResult = await this.llm.generateJSON<any>(prompt);
+      
+      // Post-process to add deterministic 'requirement' level
+      const requiredSkills: JobSkill[] = (rawResult.requiredSkills || []).map((raw: any) => {
+        return {
+          name: raw.name,
+          type: raw.type,
+          evidence: raw.evidence || "",
+          requirement: this.classifyRequirement(raw.evidence || "")
+        };
+      });
 
+      const parsed: GapAnalysis = {
+        requiredSkills,
+        candidateSkills: rawResult.candidateSkills || []
+      };
+
+      const content = JSON.stringify(parsed, null, 2);
       const filePath = this.writeOutput(fileName, content, outputDir);
 
       return {
@@ -143,5 +103,35 @@ Output ONLY valid JSON in this format:
         error: error?.message || "Unknown error occurred"
       };
     }
+  }
+
+  /**
+   * Deterministically classifies a skill's requirement level based on evidence text.
+   */
+  private classifyRequirement(evidence: string): "required" | "preferred" | "implicit" {
+    const e = evidence.toLowerCase();
+    
+    // 1. REQUIRED (checked first)
+    const requiredKeywords = ["must", "required", "essential", "minimum", "strong knowledge", "very good knowledge"];
+    if (requiredKeywords.some(k => e.includes(k))) {
+      return "required";
+    }
+
+    // 2. GOOD KNOWLEDGE (Conditional Required)
+    // Classify as required UNLESS it contains preference markers
+    const goodKnowledgeMarkers = ["good knowledge of", "good knowledge"];
+    const preferredExclusions = ["preferred", "ideally", "nice to have", "bonus"];
+    if (goodKnowledgeMarkers.some(k => e.includes(k)) && !preferredExclusions.some(k => e.includes(k))) {
+      return "required";
+    }
+
+    // 3. PREFERRED (checked third)
+    const preferredKeywords = ["preferred", "ideally", "nice to have", "bonus", "advantage", "plus"];
+    if (preferredKeywords.some(k => e.includes(k))) {
+      return "preferred";
+    }
+
+    // 3. IMPLICIT (default fallback)
+    return "implicit";
   }
 }
