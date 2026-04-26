@@ -25,7 +25,6 @@ export interface GitHubRepo {
 
 export interface JobSkill {
   name: string;
-  type: "hard" | "soft" | "implicit";
   requirement: "required" | "preferred" | "implicit";
   evidence: string;
 }
