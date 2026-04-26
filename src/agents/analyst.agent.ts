@@ -1,6 +1,6 @@
 import { BaseAgent } from './base-agent';
 import { FileSystemManager } from '../core/fs-manager';
-import { ClaudeClient } from '../core/claude-client';
+import { LLMClient } from '../clients/LLMClient';
 import { ApplicationContext, AgentOutput, GapAnalysis, JobSkill } from '../core/types';
 import * as path from 'path';
 
@@ -9,13 +9,13 @@ import * as path from 'path';
  * Responsibility: Performs gap analysis between a candidate's CV and the job description.
  */
 export class AnalystAgent extends BaseAgent {
-  constructor(fs: FileSystemManager, llm: ClaudeClient) {
+  constructor(fs: FileSystemManager, llm: LLMClient) {
     super("Analyst", fs, llm);
   }
 
   /**
    * Hardened execution method for Analyst agent.
-   * Extracts skills and performs deterministic classification in code.
+   * Extracts skills and performs classification via the LLM prompt.
    */
   async execute(context: ApplicationContext, outputDir: string): Promise<AgentOutput> {
     try {
@@ -43,6 +43,10 @@ For each skill, you MUST provide:
 1. "name": The canonical name of the technology.
 2. "type": One of "hard" | "soft" | "implicit".
 3. "evidence": The SMALLEST meaningful phrase from the text that directly contains the skill.
+4. "requirement": The requirement level assigned using these strict rules based on the exact language used in the JD:
+   - "required" → assign this when the JD uses any of these words or phrases near the skill: "required", "must have", "must", "minimum", "essential", "you have", "you bring", "strong experience with", "solid understanding of"
+   - "preferred" → assign this when the JD uses any of these words or phrases near the skill: "preferred", "nice to have", "ideally", "bonus", "plus", "advantageous", "experience with is a plus"
+   - "implicit" → assign this only when the skill is mentioned as part of the tech stack listing with no qualifying language, or when none of the above signals are present
 
 ### EXCLUSION RULES:
 - DO NOT extract abstract concepts (e.g., "Scalable systems design").
@@ -62,7 +66,7 @@ Output ONLY valid JSON in this format:
 
 {
   "requiredSkills": [
-    { "name": "string", "type": "hard" | "soft" | "implicit", "evidence": "string" }
+    { "name": "string", "type": "hard" | "soft" | "implicit", "evidence": "string", "requirement": "required" | "preferred" | "implicit" }
   ],
   "candidateSkills": [
     { "name": "string", "confidence": number }
@@ -72,18 +76,8 @@ Output ONLY valid JSON in this format:
 
       const rawResult = await this.llm.generateJSON<any>(prompt);
       
-      // Post-process to add deterministic 'requirement' level
-      const requiredSkills: JobSkill[] = (rawResult.requiredSkills || []).map((raw: any) => {
-        return {
-          name: raw.name,
-          type: raw.type,
-          evidence: raw.evidence || "",
-          requirement: this.classifyRequirement(raw.evidence || "")
-        };
-      });
-
       const parsed: GapAnalysis = {
-        requiredSkills,
+        requiredSkills: rawResult.requiredSkills || [],
         candidateSkills: rawResult.candidateSkills || []
       };
 
@@ -103,35 +97,5 @@ Output ONLY valid JSON in this format:
         error: error?.message || "Unknown error occurred"
       };
     }
-  }
-
-  /**
-   * Deterministically classifies a skill's requirement level based on evidence text.
-   */
-  private classifyRequirement(evidence: string): "required" | "preferred" | "implicit" {
-    const e = evidence.toLowerCase();
-    
-    // 1. REQUIRED (checked first)
-    const requiredKeywords = ["must", "required", "essential", "minimum", "strong knowledge", "very good knowledge"];
-    if (requiredKeywords.some(k => e.includes(k))) {
-      return "required";
-    }
-
-    // 2. GOOD KNOWLEDGE (Conditional Required)
-    // Classify as required UNLESS it contains preference markers
-    const goodKnowledgeMarkers = ["good knowledge of", "good knowledge"];
-    const preferredExclusions = ["preferred", "ideally", "nice to have", "bonus"];
-    if (goodKnowledgeMarkers.some(k => e.includes(k)) && !preferredExclusions.some(k => e.includes(k))) {
-      return "required";
-    }
-
-    // 3. PREFERRED (checked third)
-    const preferredKeywords = ["preferred", "ideally", "nice to have", "bonus", "advantage", "plus"];
-    if (preferredKeywords.some(k => e.includes(k))) {
-      return "preferred";
-    }
-
-    // 3. IMPLICIT (default fallback)
-    return "implicit";
   }
 }

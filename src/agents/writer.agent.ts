@@ -1,6 +1,6 @@
 import { BaseAgent } from './base-agent';
 import { FileSystemManager } from '../core/fs-manager';
-import { ClaudeClient } from '../core/claude-client';
+import { LLMClient } from '../clients/LLMClient';
 import { ApplicationContext, AgentOutput } from '../core/types';
 import * as path from 'path';
 
@@ -9,7 +9,7 @@ import * as path from 'path';
  * Responsibility: Generates tailored CVs and cover letters based on analysis.
  */
 export class WriterAgent extends BaseAgent {
-  constructor(fs: FileSystemManager, llm: ClaudeClient) {
+  constructor(fs: FileSystemManager, llm: LLMClient) {
     super("Writer", fs, llm);
   }
 

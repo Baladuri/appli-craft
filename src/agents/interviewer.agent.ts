@@ -1,6 +1,6 @@
 import { BaseAgent } from './base-agent';
 import { FileSystemManager } from '../core/fs-manager';
-import { ClaudeClient } from '../core/claude-client';
+import { LLMClient } from '../clients/LLMClient';
 import { ApplicationContext, AgentOutput } from '../core/types';
 import * as path from 'path';
 
@@ -9,7 +9,7 @@ import * as path from 'path';
  * Responsibility: Generates interview preparation questions based on the application context.
  */
 export class InterviewerAgent extends BaseAgent {
-  constructor(fs: FileSystemManager, llm: ClaudeClient) {
+  constructor(fs: FileSystemManager, llm: LLMClient) {
     super("Interviewer", fs, llm);
   }
 

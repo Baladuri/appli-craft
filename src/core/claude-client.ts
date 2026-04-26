@@ -1,11 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config/index';
+import { LLMClient } from '../clients/LLMClient';
 
 /**
  * A thin wrapper around the Anthropic Claude API.
  * Supports a mock mode for testing purposes.
  */
-export class ClaudeClient {
+export class ClaudeClient implements LLMClient {
   private client: Anthropic;
   private mockMode: boolean;
 
@@ -85,10 +86,10 @@ export class ClaudeClient {
       const responseText = await this.generateText(jsonPrompt);
       // Attempt to find the first '{' and last '}' to handle potential markdown wrappers if Claude ignores instructions
       const cleanResponse = responseText.substring(
-        responseText.indexOf('{'),
-        responseText.lastIndexOf('}') + 1
+          responseText.indexOf('{'),
+          responseText.lastIndexOf('}') + 1
       );
-      
+
       return JSON.parse(cleanResponse || responseText) as T;
     } catch (error: any) {
       if (error instanceof SyntaxError || error.message.includes('JSON')) {

@@ -1,5 +1,5 @@
 import { FileSystemManager } from '../core/fs-manager';
-import { ClaudeClient } from '../core/claude-client';
+import { LLMClient } from '../clients/LLMClient';
 import { ApplicationContext, AgentOutput } from '../core/types';
 import * as path from 'path';
 
@@ -10,15 +10,15 @@ import * as path from 'path';
 export abstract class BaseAgent {
   public agentName: string;
   protected fs: FileSystemManager;
-  protected llm: ClaudeClient;
+  protected llm: LLMClient;
 
   /**
    * Initializes the BaseAgent with its name and core infrastructure components.
    * @param agentName - Unique name for the agent (e.g., 'Researcher', 'Analyst')
    * @param fs - Instance of FileSystemManager for disk operations
-   * @param llm - Instance of ClaudeClient for AI interactions
+   * @param llm - Instance of LLMClient for AI interactions
    */
-  constructor(agentName: string, fs: FileSystemManager, llm: ClaudeClient) {
+  constructor(agentName: string, fs: FileSystemManager, llm: LLMClient) {
     this.agentName = agentName;
     this.fs = fs;
     this.llm = llm;

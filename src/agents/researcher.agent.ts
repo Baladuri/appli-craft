@@ -1,6 +1,6 @@
 import { BaseAgent } from './base-agent';
 import { FileSystemManager } from '../core/fs-manager';
-import { ClaudeClient } from '../core/claude-client';
+import { LLMClient } from '../clients/LLMClient';
 import { ApplicationContext, AgentOutput } from '../core/types';
 
 /**
@@ -8,7 +8,7 @@ import { ApplicationContext, AgentOutput } from '../core/types';
  * Responsibility: Researches the company and role to provide context for other agents.
  */
 export class ResearcherAgent extends BaseAgent {
-  constructor(fs: FileSystemManager, llm: ClaudeClient) {
+  constructor(fs: FileSystemManager, llm: LLMClient) {
     super("Researcher", fs, llm);
   }
 
