@@ -2,15 +2,14 @@ export interface ApplicationContext {
   company: string;
   role: string;
   date: string;
-  outputDir: string;
   jobDescription: string;
-  baseCvPath: string;
+  baseCv: string;
 }
 
-export interface AgentOutput {
+export interface AgentOutput<T = string> {
   agentName: string;
-  outputFile: string;
   success: boolean;
+  data: T;
   error?: string;
 }
 
@@ -39,6 +38,19 @@ export interface ApplicationDecision {
   hardCoverage: number;
 }
 
+export interface ApplicationMaterials {
+  tailoredCv: string;
+  coverLetter: string;
+  interviewPrep: string;
+}
+
+export interface PipelineResult {
+  decision: ApplicationDecision;
+  gapAnalysis: GapAnalysis;
+  companyBrief: string;
+  summary: string;
+}
+
 export interface SemanticMatch {
   match: "full" | "partial" | "none";
   confidence: number;
@@ -48,5 +60,5 @@ export interface OrchestratorConfig {
   jobDescription: string;
   company: string;
   role: string;
-  baseCvPath: string;
+  baseCv: string;
 }
