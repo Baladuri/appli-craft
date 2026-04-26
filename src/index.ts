@@ -8,15 +8,12 @@
   import { AnalystAgent } from './agents/analyst.agent';
   import { WriterAgent } from './agents/writer.agent';
   import { InterviewerAgent } from './agents/interviewer.agent';
+  import { normalize, matchSkill } from './core/matcher';
   import { calculateJobScore } from './core/scoring';
   import * as path from 'path';
   import * as fs from 'fs';
   import matter from 'gray-matter';
 
-  // ─── Scoring Helpers ────────────────────────────────────────────────────────
-  function normalize(skill: string): string {
-    return skill.toLowerCase().replace(/[^a-z0-9]/g, "");
-  }
 
   // ─── Logging Helpers ────────────────────────────────────────────────────────
 
@@ -152,80 +149,18 @@
           normalized: normalize(c.name)
         }));
 
-        // Step 2 — Extract a matchSkill function
-        const matchSkill = async (required: any, normalizedCandidates: any[]): Promise<{ score: number, log: string }> => {
-          const weight = getRequirementWeight(required.requirement);
-          
-          // 1. Fast path: exact normalized match
-          const exactMatch = normalizedCandidates.find((c: any) =>
-            c.normalized === normalize(required.name)
-          );
-
-          if (exactMatch) {
-            return {
-              score: 1 * weight,
-              log: `     ✓ ${required.name} → ${exactMatch.name} (exact, score: ${1 * weight})`
-            };
-          }
-
-          // 2. Semantic path: ONE call to LLM passing ALL candidate skills
-          try {
-            const semanticPrompt = `You are a skill matching system.
-
-  Required skill: "${required.name}"
-
-  Candidate skills:
-  ${normalizedCandidates.map((c, i) => `${i + 1}. ${c.name}`).join('\n')}
-
-  Find the single best match from the candidate skills list for the required skill.
-
-  Rules:
-  - "full" → candidate skill directly and fully satisfies the requirement (same technology or direct equivalent)
-  - "partial" → candidate skill partially covers the requirement (related framework or overlapping domain)
-  - "none" → no meaningful match exists in the list
-
-  Be strict but fair. If unsure, return "none".
-  DO NOT compute scores or make application decisions.
-
-  Respond ONLY with valid JSON:
-  {
-    "match": "full" | "partial" | "none",
-    "confidence": number between 0 and 1,
-    "candidateName": "exact name from the candidate list, or empty string if none"
-  }`;
-
-            const result = await llmClient.generateJSON<{ match: string; confidence: number; candidateName: string }>(semanticPrompt);
-
-            if (result.match === "full") {
-              return {
-                score: 1 * weight,
-                log: `     ≈ ${required.name} → ${result.candidateName} (semantic full, score: ${1 * weight})`
-              };
-            } else if (result.match === "partial") {
-              return {
-                score: 0.5 * weight,
-                log: `     ~ ${required.name} → ${result.candidateName} (semantic partial, score: ${0.5 * weight})`
-              };
-            } else {
-              return {
-                score: 0,
-                log: `     ✗ ${required.name} → no match (score: 0)`
-              };
-            }
-          } catch (e) {
-            return {
-              score: 0,
-              log: `     ✗ ${required.name} → no match (score: 0)`
-            };
-          }
-        };
 
         console.log(`\n  🔍 Gap Engine: Matching ${uniqueHardSkills.length} hard skills...\n`);
 
         // Step 3 — Run all required skills in parallel
         const matchResults: { score: number, log: string }[] = [];
         for (const required of uniqueHardSkills as any[]) {
-          const result = await matchSkill(required, normalizedCandidates);
+          const result = await matchSkill(
+            required,
+            normalizedCandidates,
+            llmClient,
+            getRequirementWeight
+          );
           matchResults.push(result);
         }
 
