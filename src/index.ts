@@ -42,7 +42,7 @@ function logError(agentName: string, stage: string, message: string): never {
  *
  * @param orchConfig - Configuration containing job description, company, and role
  */
-export async function runApplication(orchConfig: OrchestratorConfig): Promise<void> {
+export async function runApplication(orchConfig: OrchestratorConfig): Promise<string> {
   console.log('\n🚀 Starting AppliCraft Pipeline...');
   console.log(`   Company : ${orchConfig.company}`);
   console.log(`   Role    : ${orchConfig.role}`);
@@ -276,6 +276,8 @@ Respond ONLY with valid JSON:
   const generatedFiles = fs.readdirSync(outputDir);
   generatedFiles.forEach(f => console.log(`   → ${f}`));
   console.log('');
+
+  return outputDir;
 }
 
 /**
@@ -336,20 +338,22 @@ function generateJobRankings(): void {
 
 // ─── CLI Entry Point ─────────────────────────────────────────────────────────
 
-const job = matter(fs.readFileSync(config.jobDescriptionPath, 'utf-8'));
-if (!job.data.company || !job.data.role) {
-  throw new Error('Missing company or role in job-description frontmatter');
-}
-const orchConfig: OrchestratorConfig = {
-  company: job.data.company,
-  role: job.data.role,
-  jobDescription: job.content.trim(),
-  baseCvPath: config.baseCvPath,
-};
+if (require.main === module) {
+  const job = matter(fs.readFileSync(config.jobDescriptionPath, 'utf-8'));
+  if (!job.data.company || !job.data.role) {
+    throw new Error('Missing company or role in job-description frontmatter');
+  }
+  const orchConfig: OrchestratorConfig = {
+    company: job.data.company,
+    role: job.data.role,
+    jobDescription: job.content.trim(),
+    baseCvPath: config.baseCvPath,
+  };
 
-runApplication(orchConfig).then(() => {
-  generateJobRankings();
-}).catch((err) => {
-  console.error('\n💥 Fatal pipeline error:', err.message);
-  process.exit(1);
-});
+  runApplication(orchConfig).then(() => {
+    generateJobRankings();
+  }).catch((err) => {
+    console.error('\n💥 Fatal pipeline error:', err.message);
+    process.exit(1);
+  });
+}
