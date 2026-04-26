@@ -1,68 +1,62 @@
 import { BaseAgent } from './base-agent';
-import { FileSystemManager } from '../core/fs-manager';
 import { LLMClient } from '../clients/LLMClient';
 import { ApplicationContext, AgentOutput } from '../core/types';
 
-/**
- * ResearcherAgent - Prototype
- * Responsibility: Researches the company and role to provide context for other agents.
- */
 export class ResearcherAgent extends BaseAgent {
-  constructor(fs: FileSystemManager, llm: LLMClient) {
-    super("Researcher", fs, llm);
+  constructor(llm: LLMClient) {
+    super("Researcher", llm);
   }
 
-  /**
-   * Stub execution method for Researcher agent.
-   * Generates a mock company brief based on the application context.
-   */
-  async execute(context: ApplicationContext, outputDir: string): Promise<AgentOutput> {
+  async execute(context: ApplicationContext): Promise<AgentOutput<string>> {
     try {
-      const prompt = `
-      You are a job application researcher. Analyze the following job description and extract structured intelligence.
-      Company: ${context.company}
-      Role: ${context.role}
+      const prompt = `You are a job application researcher. Analyze 
+the following job description and extract structured intelligence.
 
-      Job Description:
-      ${context.jobDescription}
+Company: ${context.company}
+Role: ${context.role}
 
-      Write a company brief in Markdown with exactly these sections:
+Job Description:
+${context.jobDescription}
 
-      ## Company Overview
-      2-3 sentences about what the company does, their market, and scale. Extract only from the job description — do not invent facts.
+Write a company brief in Markdown with exactly these sections:
 
-      ## Role Summary
-      What this role actually does day-to-day based on the posting. Be specific.
+## Company Overview
+2-3 sentences about what the company does, their market, and scale.
+Extract only from the job description — do not invent facts.
 
-      ## Tech Stack signals
-      List every technology, framework, language, or tool mentioned. Include implicit ones (e.g. if they mention "bi-weekly releases" and "Azure" infer CI/CD matters).
+## Role Summary
+What this role actually does day-to-day based on the posting.
+Be specific.
 
-      ## Culture & Process signals
-      What does the posting reveal about how the team works? (agile, flat hierarchy, startup vs enterprise, remote policy etc.)
+## Tech Stack signals
+List every technology, framework, language, or tool mentioned.
+Include implicit ones.
 
-      ## Key Requirements
-      The 5 most important requirements ranked by how prominently they appear in the posting.
+## Culture & Process signals
+What does the posting reveal about how the team works?
 
-      ## Red flags / gaps to watch
-      Any requirements that seem non-negotiable but unusual. Be honest.
+## Key Requirements
+The 5 most important requirements ranked by how prominently
+they appear in the posting.
 
-      Output only the Markdown. No preamble, no commentary.`
+## Red flags / gaps to watch
+Any requirements that seem non-negotiable but unusual. Be honest.
+
+Output only the Markdown. No preamble, no commentary.`;
 
       const content = await this.llm.generateText(prompt);
-      const fileName = "company-brief.md";
-      const filePath = this.writeOutput(fileName, content, outputDir);
 
       return {
         agentName: this.agentName,
-        outputFile: filePath,
-        success: true
+        success: true,
+        data: content
       };
     } catch (error: any) {
       return {
         agentName: this.agentName,
-        outputFile: "",
         success: false,
-        error: error?.message || "Unknown error occurred"
+        data: '',
+        error: error?.message || 'Unknown error'
       };
     }
   }
