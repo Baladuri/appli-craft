@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node src/index.ts",
+    "server": "NODE_OPTIONS='--inspect --enable-source-maps' ts-node  src/server.ts",
     "build": "tsc",
     "start": "node dist/index.js"
   },
@@ -14,10 +15,14 @@
   "dependencies": {
     "@anthropic-ai/sdk": "*",
     "@octokit/rest": "*",
+    "cors": "^2.8.6",
     "dotenv": "*",
+    "express": "^5.2.1",
     "gray-matter": "^4.0.3"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "*",
     "ts-node": "*",
     "typescript": "*"
