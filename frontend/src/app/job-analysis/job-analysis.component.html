@@ -1,72 +1,121 @@
 <div class="container">
+
   <header>
-    <h1>Job Analysis Dashboard</h1>
-    
-    <div class="input-section">
-      <div class="input-group">
-        <label for="cvInput">Candidate CV</label>
-        <textarea id="cvInput" [(ngModel)]="cvText" placeholder="Paste CV markdown here..." [disabled]="loading"></textarea>
+    <h1>AppliCraft</h1>
+    <p class="subtitle">Know before you apply.</p>
+  </header>
+
+  <!-- CV SETUP SECTION -->
+  <section class="cv-section">
+    <div class="cv-header">
+      <h2>Your CV</h2>
+      <span *ngIf="cvSaved" class="cv-saved-badge">✓ Saved</span>
+    </div>
+    <textarea
+      [(ngModel)]="cvText"
+      placeholder="Paste your CV here once. We'll remember it."
+      [disabled]="loading"
+      rows="4">
+    </textarea>
+    <button 
+      class="save-cv-btn" 
+      (click)="onSaveCV()" 
+      [disabled]="loading || !cvText">
+      Save CV
+    </button>
+  </section>
+
+  <!-- JD INPUT SECTION -->
+  <section class="jd-section">
+    <h2>Job Description</h2>
+    <textarea
+      [(ngModel)]="jobDescription"
+      placeholder="Paste the job description here..."
+      [disabled]="loading"
+      rows="6">
+    </textarea>
+    <button 
+      class="analyze-btn" 
+      (click)="onAnalyze()" 
+      [disabled]="loading || !jobDescription">
+      <span *ngIf="!loading">Analyze</span>
+      <span *ngIf="loading">Analyzing...</span>
+    </button>
+  </section>
+
+  <div *ngIf="error" class="error">{{ error }}</div>
+
+  <!-- RESULTS SECTION -->
+  <section *ngIf="summary" class="results-section">
+
+    <!-- PRIMARY OUTPUT — Decision Card -->
+    <div class="decision-card" [ngClass]="decision">
+      <div class="decision-badge">{{ decision | uppercase }}</div>
+      <p class="summary-text">{{ summary }}</p>
+      <div class="coverage-bar-wrapper">
+        <div class="coverage-bar">
+          <div 
+            class="coverage-fill" 
+            [style.width.%]="coverage * 100">
+          </div>
+        </div>
+        <span class="coverage-label">
+          {{ coverage * 100 | number:'1.0-0' }}% match
+        </span>
       </div>
-      <div class="input-group">
-        <label for="jdInput">Job Description</label>
-        <textarea id="jdInput" [(ngModel)]="jobDescription" placeholder="Paste JD markdown here..." [disabled]="loading"></textarea>
-      </div>
-      <button class="analyze-btn" (click)='onAnalyze()' [disabled]="loading">
-        <span *ngIf="!loading">Analyze Application</span>
-        <span *ngIf="loading">Analyzing...</span>
+    </div>
+
+    <!-- SECONDARY OUTPUT — Skill Detail Toggle -->
+    <div class="skill-toggle">
+      <button class="toggle-btn" (click)="toggleSkillDetail()">
+        {{ showSkillDetail ? 'Hide skill breakdown' : 'View skill breakdown' }}
       </button>
     </div>
 
-    <div *ngIf="error" class="error">{{ error }}</div>
-  </header>
+    <div *ngIf="showSkillDetail" class="skill-detail">
+      <div class="grid">
 
-  <main *ngIf="!loading && (jobScore || candidateSkills.length > 0)">
-    <div class="grid">
-      <!-- LEFT COLUMN: Candidate Skills -->
-      <section class="column">
-        <h2>Candidate Skills</h2>
-        <div class="list">
-          <div *ngFor="let skill of candidateSkills; let i = index" class="card">
-            <div class="card-header">
-              <span class="name">{{ skill.name }}</span>
-              <button class="delete-btn" (click)="deleteCandidateSkill(i)">×</button>
+        <!-- Candidate Skills -->
+        <section class="column">
+          <h3>Your Skills</h3>
+          <div class="list">
+            <div 
+              *ngFor="let skill of candidateSkills; let i = index" 
+              class="card">
+              <div class="card-header">
+                <span class="name">{{ skill.name }}</span>
+                <button class="delete-btn" (click)="deleteCandidateSkill(i)">×</button>
+              </div>
+              <div class="confidence">
+                {{ skill.confidence | percent }}
+              </div>
             </div>
-            <div class="confidence">Confidence: {{ skill.confidence | percent }}</div>
           </div>
-          <div *ngIf="candidateSkills.length === 0" class="empty">No skills found</div>
-        </div>
-      </section>
+        </section>
 
-      <!-- RIGHT COLUMN: Job Required Skills -->
-      <section class="column">
-        <h2>Job Requirements</h2>
-        <div class="list">
-          <div *ngFor="let skill of jobSkills; let i = index" class="card">
-            <div class="card-header">
-              <span class="name">{{ skill.name }}</span>
-              <button class="delete-btn" (click)="deleteJobSkill(i)">×</button>
+        <!-- Job Requirements -->
+        <section class="column">
+          <h3>Job Requirements</h3>
+          <div class="list">
+            <div 
+              *ngFor="let skill of jobSkills; let i = index" 
+              class="card">
+              <div class="card-header">
+                <span class="name">{{ skill.name }}</span>
+                <button class="delete-btn" (click)="deleteJobSkill(i)">×</button>
+              </div>
+              <div class="badge-row">
+                <span class="badge" [ngClass]="skill.requirement">
+                  {{ skill.requirement }}
+                </span>
+              </div>
             </div>
-            <div class="badge-row">
-              <span class="badge" [ngClass]="skill.requirement">{{ skill.requirement }}</span>
-              <span class="type">{{ skill.type }}</span>
-            </div>
-            <p class="evidence">{{ skill.evidence }}</p>
           </div>
-          <div *ngIf="jobSkills.length === 0" class="empty">No requirements found</div>
-        </div>
-      </section>
+        </section>
+
+      </div>
     </div>
 
-    <!-- BOTTOM SECTION: Decision & Score -->
-    <footer *ngIf="jobScore">
-      <div class="decision-card" [ngClass]="jobScore.decision">
-        <div class="decision-label">Final Decision</div>
-        <div class="decision-value">{{ jobScore.decision | uppercase }}</div>
-        <div class="score-row">
-          <div class="score-label">Match Score</div>
-          <div class="score-value">{{ jobScore.score }}%</div>
-        </div>
-      </div>
-    </footer>
-  </main>
+  </section>
+
 </div>

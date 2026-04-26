@@ -237,3 +237,106 @@ footer {
 .loading { color: #3498db; }
 .error { color: #e74c3c; }
 .empty { color: #95a5a6; font-style: italic; }
+
+.subtitle { color: #888; margin-top: -8px; margin-bottom: 24px; }
+
+.cv-section, .jd-section { margin-bottom: 24px; }
+
+.cv-header { 
+  display: flex; 
+  align-items: center; 
+  gap: 12px; 
+  margin-bottom: 8px; 
+}
+
+.cv-saved-badge { 
+  background: #22c55e; 
+  color: white; 
+  padding: 2px 10px; 
+  border-radius: 12px; 
+  font-size: 12px; 
+}
+
+.save-cv-btn { 
+  margin-top: 8px; 
+  padding: 8px 20px; 
+  background: #64748b; 
+  color: white; 
+  border: none; 
+  border-radius: 6px; 
+  cursor: pointer; 
+}
+
+.results-section { margin-top: 32px; }
+
+.decision-card { 
+  padding: 24px; 
+  border-radius: 12px; 
+  margin-bottom: 16px; 
+}
+
+.decision-card.apply { background: #f0fdf4; border: 1px solid #22c55e; }
+.decision-card.maybe { background: #fffbeb; border: 1px solid #f59e0b; }
+.decision-card.skip  { background: #fef2f2; border: 1px solid #ef4444; }
+
+.decision-badge { 
+  font-size: 13px; 
+  font-weight: 700; 
+  letter-spacing: 1px; 
+  margin-bottom: 12px; 
+}
+
+.apply .decision-badge { color: #16a34a; }
+.maybe .decision-badge { color: #d97706; }
+.skip  .decision-badge { color: #dc2626; }
+
+.summary-text { 
+  font-size: 15px; 
+  line-height: 1.7; 
+  color: #1e293b; 
+  margin-bottom: 16px; 
+}
+
+.coverage-bar-wrapper { 
+  display: flex; 
+  align-items: center; 
+  gap: 12px; 
+}
+
+.coverage-bar { 
+  flex: 1; 
+  height: 6px; 
+  background: #e2e8f0; 
+  border-radius: 3px; 
+  overflow: hidden; 
+}
+
+.coverage-fill { 
+  height: 100%; 
+  background: #3b82f6; 
+  border-radius: 3px; 
+  transition: width 0.4s ease; 
+}
+
+.coverage-label { 
+  font-size: 13px; 
+  color: #64748b; 
+  white-space: nowrap; 
+}
+
+.skill-toggle { 
+  text-align: center; 
+  margin-bottom: 16px; 
+}
+
+.toggle-btn { 
+  background: none; 
+  border: 1px solid #cbd5e1; 
+  padding: 8px 20px; 
+  border-radius: 6px; 
+  cursor: pointer; 
+  color: #64748b; 
+  font-size: 13px; 
+}
+
+.toggle-btn:hover { background: #f8fafc; }

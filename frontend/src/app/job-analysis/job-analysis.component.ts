@@ -15,6 +15,12 @@ export class JobAnalysisComponent implements OnInit {
   cvText: string = '';
   jobDescription: string = '';
 
+  summary: string = '';
+  decision: string = '';
+  coverage: number = 0;
+  showSkillDetail: boolean = false;
+  cvSaved: boolean = false;
+
   candidateSkills: CandidateSkill[] = [];
   jobSkills: JobSkill[] = [];
   jobScore: JobScore | null = null;
@@ -24,22 +30,39 @@ export class JobAnalysisComponent implements OnInit {
   constructor(private apiService: ApiService, private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
-    // Automatic loading removed as per requirement
+    // Check if CV already exists on backend
+    // this.apiService.getCV().subscribe(...) could be added here later
+  }
+
+  onSaveCV(): void {
+    if (!this.cvText) return;
+    this.apiService.saveCV(this.cvText).subscribe({
+      next: () => {
+        this.cvSaved = true;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.error = 'Failed to save CV';
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   onAnalyze(): void {
-    if (!this.cvText || !this.jobDescription) {
-      this.error = 'Please provide both CV and Job Description';
+    if (!this.jobDescription) {
+      this.error = 'Please provide a Job Description';
       return;
     }
 
     this.loading = true;
     this.error = null;
-    console.log('Starting analysis...');
-
-    this.apiService.analyze(this.cvText, this.jobDescription).subscribe({
+    this.summary = ''; // Clear previous result
+    
+    this.apiService.analyze(this.jobDescription).subscribe({
       next: (res) => {
-        console.log('Analysis complete:', res);
+        this.summary = res.summary;
+        this.decision = res.decision;
+        this.coverage = res.coverage;
         this.candidateSkills = res.gapAnalysis.candidateSkills;
         this.jobSkills = res.gapAnalysis.requiredSkills;
         this.jobScore = res.jobScore;
@@ -48,11 +71,15 @@ export class JobAnalysisComponent implements OnInit {
       },
       error: (err) => {
         console.error('Analysis failed:', err);
-        this.error = 'Analysis failed. Please try again.';
+        this.error = err.error?.error || 'Analysis failed. Please ensure you saved your CV first.';
         this.loading = false;
         this.cdr.detectChanges();
       }
     });
+  }
+
+  toggleSkillDetail(): void {
+    this.showSkillDetail = !this.showSkillDetail;
   }
 
   deleteCandidateSkill(index: number): void {

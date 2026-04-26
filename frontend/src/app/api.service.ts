@@ -19,10 +19,11 @@ export class ApiService {
     return this.http.get<JobScore>(`${this.baseUrl}/job-score`);
   }
 
-  analyze(cvText: string, jobDescription: string): Observable<{ gapAnalysis: GapAnalysis; jobScore: JobScore }> {
-    return this.http.post<{ gapAnalysis: GapAnalysis; jobScore: JobScore }>(`${this.baseUrl}/analyze`, {
-      cvText,
-      jobDescription
-    });
+  analyze(jobDescription: string): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/analyze`, { jobDescription });
+  }
+
+  saveCV(cvText: string): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/cv`, { cvText });
   }
 }
