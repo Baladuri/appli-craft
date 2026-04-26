@@ -1,22 +1,19 @@
 import { BaseAgent } from './base-agent';
-import { FileSystemManager } from '../core/fs-manager';
 import { LLMClient } from '../clients/LLMClient';
 import { ApplicationContext, AgentOutput, GapAnalysis } from '../core/types';
 import * as crypto from 'crypto';
-import * as path from 'path';
 
-// Module-level caches — persist for entire server session
 const candidateCache = new Map<string, { name: string; confidence: number }[]>();
 const jdCache = new Map<string, any[]>();
 
 export class AnalystAgent extends BaseAgent {
-  constructor(fs: FileSystemManager, llm: LLMClient) {
-    super("Analyst", fs, llm);
+  constructor(llm: LLMClient) {
+    super("Analyst", llm);
   }
 
-  async execute(context: ApplicationContext, outputDir: string): Promise<AgentOutput> {
+  async execute(context: ApplicationContext): Promise<AgentOutput<GapAnalysis>> {
     try {
-      const baseCv = this.fs.readFile(context.baseCvPath);
+      const baseCv = context.baseCv;
       const jobDescription = context.jobDescription;
 
       const cvHash = crypto.createHash('md5').update(baseCv).digest('hex');
@@ -52,10 +49,10 @@ Output ONLY valid JSON:
   ]
 }`;
 
-        const result = await this.llm.generateJSON<{ 
-          candidateSkills: { name: string; confidence: number }[] 
+        const result = await this.llm.generateJSON<{
+          candidateSkills: { name: string; confidence: number }[]
         }>(cvPrompt);
-        
+
         candidateSkills = result.candidateSkills || [];
         candidateCache.set(cvHash, candidateSkills);
         console.log(`  📋 Candidate skills extracted: ${candidateSkills.length} skills`);
@@ -91,6 +88,9 @@ Exclusion rules:
 - Do NOT extract abstract concepts
 - Do NOT extract soft skills or behaviors
 - Do NOT extract responsibility phrases
+- If two extracted skills refer to the same concept or are commonly 
+  written as a combined term, extract them as one skill using the 
+  combined form, not as two separate entries
 
 Output ONLY valid JSON:
 {
@@ -109,21 +109,19 @@ Output ONLY valid JSON:
         console.log(`  📋 JD skills extracted: ${requiredSkills.length} skills`);
       }
 
-      // ── Step 3: Write combined output ─────────────────────────────────────
+      // ── Step 3: Return combined result in memory ──────────────────────────
       const parsed: GapAnalysis = { requiredSkills, candidateSkills };
-      const content = JSON.stringify(parsed, null, 2);
-      const filePath = this.writeOutput('gap-analysis.json', content, outputDir);
 
       return {
         agentName: this.agentName,
-        outputFile: filePath,
-        success: true
+        success: true,
+        data: parsed
       };
     } catch (error: any) {
       return {
         agentName: this.agentName,
-        outputFile: '',
         success: false,
+        data: { requiredSkills: [], candidateSkills: [] },
         error: error?.message || 'Unknown error'
       };
     }
