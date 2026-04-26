@@ -1,0 +1,72 @@
+<div class="container">
+  <header>
+    <h1>Job Analysis Dashboard</h1>
+    
+    <div class="input-section">
+      <div class="input-group">
+        <label for="cvInput">Candidate CV</label>
+        <textarea id="cvInput" [(ngModel)]="cvText" placeholder="Paste CV markdown here..." [disabled]="loading"></textarea>
+      </div>
+      <div class="input-group">
+        <label for="jdInput">Job Description</label>
+        <textarea id="jdInput" [(ngModel)]="jobDescription" placeholder="Paste JD markdown here..." [disabled]="loading"></textarea>
+      </div>
+      <button class="analyze-btn" (click)='onAnalyze()' [disabled]="loading">
+        <span *ngIf="!loading">Analyze Application</span>
+        <span *ngIf="loading">Analyzing...</span>
+      </button>
+    </div>
+
+    <div *ngIf="error" class="error">{{ error }}</div>
+  </header>
+
+  <main *ngIf="!loading && (jobScore || candidateSkills.length > 0)">
+    <div class="grid">
+      <!-- LEFT COLUMN: Candidate Skills -->
+      <section class="column">
+        <h2>Candidate Skills</h2>
+        <div class="list">
+          <div *ngFor="let skill of candidateSkills; let i = index" class="card">
+            <div class="card-header">
+              <span class="name">{{ skill.name }}</span>
+              <button class="delete-btn" (click)="deleteCandidateSkill(i)">×</button>
+            </div>
+            <div class="confidence">Confidence: {{ skill.confidence | percent }}</div>
+          </div>
+          <div *ngIf="candidateSkills.length === 0" class="empty">No skills found</div>
+        </div>
+      </section>
+
+      <!-- RIGHT COLUMN: Job Required Skills -->
+      <section class="column">
+        <h2>Job Requirements</h2>
+        <div class="list">
+          <div *ngFor="let skill of jobSkills; let i = index" class="card">
+            <div class="card-header">
+              <span class="name">{{ skill.name }}</span>
+              <button class="delete-btn" (click)="deleteJobSkill(i)">×</button>
+            </div>
+            <div class="badge-row">
+              <span class="badge" [ngClass]="skill.requirement">{{ skill.requirement }}</span>
+              <span class="type">{{ skill.type }}</span>
+            </div>
+            <p class="evidence">{{ skill.evidence }}</p>
+          </div>
+          <div *ngIf="jobSkills.length === 0" class="empty">No requirements found</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- BOTTOM SECTION: Decision & Score -->
+    <footer *ngIf="jobScore">
+      <div class="decision-card" [ngClass]="jobScore.decision">
+        <div class="decision-label">Final Decision</div>
+        <div class="decision-value">{{ jobScore.decision | uppercase }}</div>
+        <div class="score-row">
+          <div class="score-label">Match Score</div>
+          <div class="score-value">{{ jobScore.score }}%</div>
+        </div>
+      </div>
+    </footer>
+  </main>
+</div>
