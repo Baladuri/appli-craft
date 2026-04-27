@@ -17,9 +17,9 @@
       [disabled]="loading"
       rows="4">
     </textarea>
-    <button 
-      class="save-cv-btn" 
-      (click)="onSaveCV()" 
+    <button
+      class="save-cv-btn"
+      (click)="onSaveCV()"
       [disabled]="loading || !cvText">
       Save CV
     </button>
@@ -34,9 +34,9 @@
       [disabled]="loading"
       rows="6">
     </textarea>
-    <button 
-      class="analyze-btn" 
-      (click)="onAnalyze()" 
+    <button
+      class="analyze-btn"
+      (click)="onAnalyze()"
       [disabled]="loading || !jobDescription">
       <span *ngIf="!loading">Analyze</span>
       <span *ngIf="loading">Analyzing...</span>
@@ -54,8 +54,8 @@
       <p class="summary-text">{{ summary }}</p>
       <div class="coverage-bar-wrapper">
         <div class="coverage-bar">
-          <div 
-            class="coverage-fill" 
+          <div
+            class="coverage-fill"
             [style.width.%]="coverage * 100">
           </div>
         </div>
@@ -65,7 +65,45 @@
       </div>
     </div>
 
-    <!-- SECONDARY OUTPUT — Skill Detail Toggle -->
+    <!-- MATERIALS SECTION — only for apply or maybe -->
+    <div *ngIf="decision === 'apply' || decision === 'maybe'"
+         class="materials-section">
+
+      <!-- Generate button -->
+      <div *ngIf="!materials && !generatingMaterials">
+        <button class="generate-btn" (click)="onGenerateMaterials()">
+          Generate Application Materials
+        </button>
+      </div>
+
+      <!-- Loading state -->
+      <div *ngIf="generatingMaterials" class="generating-state">
+        Generating your tailored CV, cover letter and interview prep...
+      </div>
+
+      <!-- Download buttons -->
+      <div *ngIf="materials && !generatingMaterials"
+           class="download-buttons">
+        <button
+          class="download-btn"
+          (click)="downloadFile(materials.tailoredCv, 'tailored-cv.md')">
+          Download Tailored CV
+        </button>
+        <button
+          class="download-btn"
+          (click)="downloadFile(materials.coverLetter, 'cover-letter.md')">
+          Download Cover Letter
+        </button>
+        <button
+          class="download-btn"
+          (click)="downloadFile(materials.interviewPrep, 'interview-prep.md')">
+          Download Interview Prep
+        </button>
+      </div>
+
+    </div>
+
+    <!-- SKILL DETAIL TOGGLE -->
     <div class="skill-toggle">
       <button class="toggle-btn" (click)="toggleSkillDetail()">
         {{ showSkillDetail ? 'Hide skill breakdown' : 'View skill breakdown' }}
@@ -79,8 +117,8 @@
         <section class="column">
           <h3>Your Skills</h3>
           <div class="list">
-            <div 
-              *ngFor="let skill of candidateSkills; let i = index" 
+            <div
+              *ngFor="let skill of candidateSkills; let i = index"
               class="card">
               <div class="card-header">
                 <span class="name">{{ skill.name }}</span>
@@ -97,8 +135,8 @@
         <section class="column">
           <h3>Job Requirements</h3>
           <div class="list">
-            <div 
-              *ngFor="let skill of jobSkills; let i = index" 
+            <div
+              *ngFor="let skill of jobSkills; let i = index"
               class="card">
               <div class="card-header">
                 <span class="name">{{ skill.name }}</span>

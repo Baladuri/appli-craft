@@ -26,4 +26,8 @@ export class ApiService {
   saveCV(cvText: string): Observable<any> {
     return this.http.post<any>(`${this.baseUrl}/cv`, { cvText });
   }
+
+  generateMaterials(sessionId: string): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/generate-materials`, { sessionId });
+  }
 }

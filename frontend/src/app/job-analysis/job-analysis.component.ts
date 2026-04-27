@@ -18,6 +18,7 @@ export class JobAnalysisComponent implements OnInit {
   summary: string = '';
   decision: string = '';
   coverage: number = 0;
+  sessionId: string = '';
   showSkillDetail: boolean = false;
   cvSaved: boolean = false;
 
@@ -27,12 +28,16 @@ export class JobAnalysisComponent implements OnInit {
   loading = false;
   error: string | null = null;
 
+  generatingMaterials: boolean = false;
+  materials: {
+    tailoredCv: string;
+    coverLetter: string;
+    interviewPrep: string;
+  } | null = null;
+
   constructor(private apiService: ApiService, private cdr: ChangeDetectorRef) {}
 
-  ngOnInit(): void {
-    // Check if CV already exists on backend
-    // this.apiService.getCV().subscribe(...) could be added here later
-  }
+  ngOnInit(): void {}
 
   onSaveCV(): void {
     if (!this.cvText) return;
@@ -56,16 +61,18 @@ export class JobAnalysisComponent implements OnInit {
 
     this.loading = true;
     this.error = null;
-    this.summary = ''; // Clear previous result
-    
+    this.summary = '';
+    this.materials = null;
+    this.sessionId = '';
+
     this.apiService.analyze(this.jobDescription).subscribe({
       next: (res) => {
+        this.sessionId = res.sessionId;
         this.summary = res.summary;
         this.decision = res.decision;
         this.coverage = res.coverage;
         this.candidateSkills = res.gapAnalysis.candidateSkills;
         this.jobSkills = res.gapAnalysis.requiredSkills;
-        this.jobScore = res.jobScore;
         this.loading = false;
         this.cdr.detectChanges();
       },
@@ -76,6 +83,35 @@ export class JobAnalysisComponent implements OnInit {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  onGenerateMaterials(): void {
+    if (!this.sessionId) return;
+    this.generatingMaterials = true;
+    this.error = null;
+
+    this.apiService.generateMaterials(this.sessionId).subscribe({
+      next: (res) => {
+        this.materials = res;
+        this.generatingMaterials = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.error = 'Failed to generate materials. Please try again.';
+        this.generatingMaterials = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  downloadFile(content: string, filename: string): void {
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   toggleSkillDetail(): void {
