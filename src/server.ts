@@ -2,8 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import * as fs from 'fs';
 import * as path from 'path';
-import { runApplication, runApplicationBatch } from './index';
-import { OrchestratorConfig } from './core/types';
+import { runApplication, runApplicationBatch, runMaterials } from './index';
+import { OrchestratorConfig, GapAnalysis } from './core/types';
 import { ClaudeClient } from './core/claude-client';
 
 const app = express();
@@ -11,6 +11,14 @@ const port = 3000;
 
 app.use(cors());
 app.use(express.json());
+
+interface AnalysisSession {
+  orchConfig: OrchestratorConfig;
+  companyBrief: string;
+  gapAnalysis: GapAnalysis;
+}
+
+const sessions = new Map<string, AnalysisSession>();
 
 const PERSISTENT_CV_PATH = path.join(__dirname, '../data/candidate-cv.md');
 const PERSISTENT_CV_HASH_PATH = path.join(__dirname, '../data/candidate-cv.hash');
@@ -61,49 +69,42 @@ app.get('/cv', (req, res) => {
 });
 
 app.post('/analyze', async (req, res) => {
-  const { jobDescription } = req.body;
+  const { jobDescription, company, role } = req.body;
 
   if (!jobDescription) {
     return res.status(400).json({ error: 'jobDescription is required' });
   }
 
   if (!fs.existsSync(PERSISTENT_CV_PATH)) {
-    return res.status(400).json({ error: 'No CV found. Please upload your CV first via POST /cv' });
+    return res.status(400).json({
+      error: 'No CV found. Please upload your CV first via POST /cv'
+    });
   }
 
   try {
-    const company = req.body.company || extractCompanyFromJD(jobDescription);
-    const role = req.body.role || extractRoleFromJD(jobDescription);
+    const baseCv = fs.readFileSync(PERSISTENT_CV_PATH, 'utf-8');
 
     const orchConfig: OrchestratorConfig = {
-      company,
-      role,
-      jobDescription: jobDescription,
-      baseCvPath: PERSISTENT_CV_PATH
+      company: company || extractCompanyFromJD(jobDescription),
+      role: role || extractRoleFromJD(jobDescription),
+      jobDescription,
+      baseCv
     };
 
-    const outputDir = await runApplication(orchConfig);
-
-    const gapAnalysisPath = path.join(outputDir, 'gap-analysis.json');
-    const jobScorePath = path.join(outputDir, 'job-score.json');
-    const decisionPath = path.join(outputDir, 'decision.json');
-
-    const gapAnalysis = JSON.parse(fs.readFileSync(gapAnalysisPath, 'utf-8'));
-    const jobScore = JSON.parse(fs.readFileSync(jobScorePath, 'utf-8'));
-    const decisionData = JSON.parse(fs.readFileSync(decisionPath, 'utf-8'));
+    const result = await runApplication(orchConfig);
 
     // Generate paragraph summary
     const llmClient = new ClaudeClient();
-    const summaryPrompt = `You are a career advisor giving honest, direct advice.
+    const summaryPrompt = `You are a career advisor giving honest direct advice.
 
-Based on this job fit analysis, write a 3-4 sentence paragraph 
+Based on this job fit analysis write a 3-4 sentence paragraph
 telling the candidate whether to apply and exactly why.
 
-Decision: ${decisionData.applyDecision}
-Coverage score: ${decisionData.hardCoverage}
+Decision: ${result.decision.applyDecision}
+Coverage score: ${result.decision.hardCoverage}
 
-Required skills and match results:
-${JSON.stringify(gapAnalysis.requiredSkills, null, 2)}
+Required skills:
+${JSON.stringify(result.gapAnalysis.requiredSkills, null, 2)}
 
 Rules:
 - Be direct and specific, name actual skills
@@ -117,16 +118,61 @@ Rules:
 
     const summary = await llmClient.generateText(summaryPrompt);
 
-    res.json({ 
+    // Store session for on-demand material generation
+    const sessionId = `${orchConfig.company}-${orchConfig.role}-${Date.now()}`
+      .toLowerCase()
+      .replace(/\s+/g, '-');
+
+    sessions.set(sessionId, {
+      orchConfig,
+      companyBrief: result.companyBrief,
+      gapAnalysis: result.gapAnalysis
+    });
+
+    res.json({
+      sessionId,
       summary,
-      decision: decisionData.applyDecision,
-      coverage: decisionData.hardCoverage,
-      gapAnalysis, 
-      jobScore 
+      decision: result.decision.applyDecision,
+      coverage: result.decision.hardCoverage,
+      gapAnalysis: result.gapAnalysis
     });
   } catch (error: any) {
     console.error('Analysis failed:', error);
     res.status(500).json({ error: 'Analysis failed: ' + error.message });
+  }
+});
+
+app.post('/generate-materials', async (req, res) => {
+  const { sessionId } = req.body;
+
+  if (!sessionId) {
+    return res.status(400).json({ error: 'sessionId is required' });
+  }
+
+  const session = sessions.get(sessionId);
+  if (!session) {
+    return res.status(404).json({
+      error: 'Session not found. Please re-run analysis first.'
+    });
+  }
+
+  try {
+    const materials = await runMaterials(
+      session.orchConfig,
+      session.companyBrief,
+      session.gapAnalysis
+    );
+
+    res.json({
+      tailoredCv: materials.tailoredCv,
+      coverLetter: materials.coverLetter,
+      interviewPrep: materials.interviewPrep
+    });
+  } catch (error: any) {
+    console.error('Material generation failed:', error);
+    res.status(500).json({
+      error: 'Material generation failed: ' + error.message
+    });
   }
 });
 
@@ -138,33 +184,34 @@ app.post('/analyze/batch', async (req, res) => {
   }
 
   if (!fs.existsSync(PERSISTENT_CV_PATH)) {
-    return res.status(400).json({ 
-      error: 'No CV found. Please upload your CV first via POST /cv' 
+    return res.status(400).json({
+      error: 'No CV found. Please upload your CV first via POST /cv'
     });
   }
 
   if (jobs.length > 10) {
-    return res.status(400).json({ 
-      error: 'Maximum 10 jobs per batch' 
+    return res.status(400).json({
+      error: 'Maximum 10 jobs per batch'
     });
   }
 
   try {
+    const baseCv = fs.readFileSync(PERSISTENT_CV_PATH, 'utf-8');
+
     const configs: OrchestratorConfig[] = jobs.map((job: any) => ({
       company: job.company || extractCompanyFromJD(job.jobDescription),
       role: job.role || extractRoleFromJD(job.jobDescription),
       jobDescription: job.jobDescription,
-      baseCvPath: PERSISTENT_CV_PATH
+      baseCv
     }));
 
     await runApplicationBatch(configs);
 
-    // Read rankings file produced by runApplicationBatch
     const rankingsPath = path.join(
-      __dirname, 
+      __dirname,
       '../applications/job-rankings.json'
     );
-    
+
     if (fs.existsSync(rankingsPath)) {
       const rankings = JSON.parse(fs.readFileSync(rankingsPath, 'utf-8'));
       res.json({ rankings });
@@ -173,7 +220,9 @@ app.post('/analyze/batch', async (req, res) => {
     }
   } catch (error: any) {
     console.error('Batch analysis failed:', error);
-    res.status(500).json({ error: 'Batch analysis failed: ' + error.message });
+    res.status(500).json({
+      error: 'Batch analysis failed: ' + error.message
+    });
   }
 });
 
