@@ -1,27 +1,31 @@
-  import { config, validateConfig } from './config/index';
-  import { ApplicationContext, OrchestratorConfig } from './core/types';
-  import { FileSystemManager } from './core/fs-manager';
-  import { LLMClient } from './clients/LLMClient';
-  import { ClaudeClient } from './core/claude-client';
-  import { GitHubClient } from './core/github-client';
-  import { ResearcherAgent } from './agents/researcher.agent';
-  import { AnalystAgent } from './agents/analyst.agent';
-  import { WriterAgent } from './agents/writer.agent';
-  import { InterviewerAgent } from './agents/interviewer.agent';
-  import { normalize, matchSkill } from './core/matcher';
-  import { calculateJobScore } from './core/scoring';
-  import * as path from 'path';
-  import * as fs from 'fs';
-  import matter from 'gray-matter';
+import { config, validateConfig } from './config/index';
+import { 
+  ApplicationContext,
+  OrchestratorConfig,
+  PipelineResult,
+  ApplicationDecision,
+  GapAnalysis,
+  ApplicationMaterials
+} from './core/types';
+import { LLMClient } from './clients/LLMClient';
+import { ClaudeClient } from './core/claude-client';
+import { ResearcherAgent } from './agents/researcher.agent';
+import { AnalystAgent } from './agents/analyst.agent';
+import { WriterAgent } from './agents/writer.agent';
+import { InterviewerAgent } from './agents/interviewer.agent';
+import { normalize, matchSkill } from './core/matcher';
+import { calculateJobScore } from './core/scoring';
+import * as path from 'path';
+import * as fs from 'fs';
+import matter from 'gray-matter';
 
 
   // ─── Logging Helpers ────────────────────────────────────────────────────────
 
-  function logStep(agentName: string, outputFile: string, success: boolean): void {
-    const status = success ? '✅' : '❌';
-    const shortPath = path.relative(process.cwd(), outputFile);
-    console.log(`  ${status} [${agentName}] completed → ${shortPath}`);
-  }
+function logStep(agentName: string, success: boolean): void {
+  const status = success ? '✅' : '❌';
+  console.log(`  ${status} [${agentName}] completed`);
+}
 
   function logError(agentName: string, stage: string, message: string): never {
     const errMsg = `[PIPELINE ERROR] Stage: ${stage} | Agent: ${agentName} | ${message}`;
@@ -40,89 +44,81 @@
    *
    * @param orchConfig - Configuration containing job description, company, and role
    */
-  export async function runApplication(orchConfig: OrchestratorConfig): Promise<string> {
-    console.log('\n🚀 Starting AppliCraft Pipeline...');
-    console.log(`   Company : ${orchConfig.company}`);
-    console.log(`   Role    : ${orchConfig.role}`);
-    console.log('');
+export async function runApplication(orchConfig: OrchestratorConfig): Promise<PipelineResult> {
+  console.log('\n🚀 Starting AppliCraft Pipeline...');
+  console.log(`   Company : ${orchConfig.company}`);
+  console.log(`   Role    : ${orchConfig.role}`);
+  console.log('');
 
-    // ── Step 1: Validate Configuration ────────────────────────────────────────
-    validateConfig();
-    console.log('🔧 Configuration validated.');
+  // ── Step 1: Validate Configuration ────────────────────────────────────────
+  validateConfig();
+  console.log('🔧 Configuration validated.');
 
-    // ── Step 2: Initialize Core Services ──────────────────────────────────────
-    const fsManager = new FileSystemManager(config.outputBaseDir);
-    const llmClient: LLMClient = new ClaudeClient();
-    const githubClient = new GitHubClient();
+  // ── Step 2: Initialize Core Services ──────────────────────────────────────
+  const llmClient: LLMClient = new ClaudeClient();
 
-    console.log(`🤖 Services initialized (Mock Mode: ${config.mockMode})`);
+  console.log(`🤖 Services initialized (Mock Mode: ${config.mockMode})`);
 
-    // ── Step 3: Create Application Run Folder ─────────────────────────────────
-    const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  // ── Step 3: Create Output Directory (for rankings only) ───────────────────
+  const date = new Date().toISOString().split('T')[0];
+  const outputDir = path.join(
+    config.outputBaseDir,
+    'applications',
+    `${orchConfig.company}-${orchConfig.role}-${date}`
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+  );
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
 
-    // createApplicationFolder builds: <outputBaseDir>/applications/<company-role-date>/
-    // We pass path.dirname(config.outputBaseDir) to avoid double-nesting since
-    // config.outputBaseDir already IS the "applications" base directory.
-    const outputDir = fsManager.createApplicationFolder(
-      path.dirname(config.outputBaseDir),
-      orchConfig.company,
-      orchConfig.role,
-      date
-    );
+  console.log(`📂 Rankings directory: ${path.relative(process.cwd(), outputDir)}\n`);
 
-    console.log(`📂 Output directory: ${path.relative(process.cwd(), outputDir)}\n`);
+  // ── Step 4: Build ApplicationContext ──────────────────────────────────────
+  const context: ApplicationContext = {
+    company: orchConfig.company,
+    role: orchConfig.role,
+    date,
+    jobDescription: orchConfig.jobDescription,
+    baseCv: orchConfig.baseCv,
+  };
 
-    // ── Step 4: Build ApplicationContext ──────────────────────────────────────
-    const context: ApplicationContext = {
-      company: orchConfig.company,
-      role: orchConfig.role,
-      date,
-      jobDescription: orchConfig.jobDescription,
-      outputDir,
-      baseCvPath: orchConfig.baseCvPath,
-    };
+  // ── Step 5: Instantiate Core Agents ───────────────────────────────────────
+  const researcher = new ResearcherAgent(llmClient);
+  const analyst = new AnalystAgent(llmClient);
 
-    // ── Step 5: Instantiate All Agents ────────────────────────────────────────
-    const researcher = new ResearcherAgent(fsManager, llmClient);
-    const analyst = new AnalystAgent(fsManager, llmClient);
-    const writer = new WriterAgent(fsManager, llmClient);
-    const interviewer = new InterviewerAgent(fsManager, llmClient);
-
-    console.log('🔗 Running pipeline...\n');
+  console.log('🔗 Running pipeline...\n');
 
     // ── Step 6: Sequential Pipeline Execution ─────────────────────────────────
 
-    // Stage 1 — Researcher
-    let researchResult;
-    try {
-      researchResult = await researcher.execute(context, outputDir);
-      if (!researchResult.success) {
-        logError(researchResult.agentName, 'Research', researchResult.error || 'Unknown error');
-      }
-      logStep(researchResult.agentName, researchResult.outputFile, researchResult.success);
-    } catch (err: any) {
-      logError('Researcher', 'Research', err.message);
+  // Stage 1 — Researcher
+  let researcherResult;
+  try {
+    researcherResult = await researcher.execute(context);
+    if (!researcherResult.success) {
+      logError(researcherResult.agentName, 'Research', researcherResult.error || 'Unknown error');
     }
+    logStep(researcherResult.agentName, researcherResult.success);
+  } catch (err: any) {
+    logError('Researcher', 'Research', err.message);
+  }
+  const companyBrief = researcherResult!.data;
 
-    // Integrity check: ensure company-brief.md was produced before proceeding
-    const companyBriefPath = path.join(outputDir, 'company-brief.md');
-    if (!fsManager.fileExists(companyBriefPath)) {
-      logError('Researcher', 'Research', 'company-brief.md was not produced.');
+  // Stage 2 — Analyst
+  let analystResult;
+  try {
+    analystResult = await analyst.execute(context);
+    if (!analystResult.success) {
+      logError(analystResult.agentName, 'Analysis', analystResult.error || 'Unknown error');
     }
+    logStep(analystResult.agentName, analystResult.success);
+  } catch (err: any) {
+    logError('Analyst', 'Analysis', err.message);
+  }
+  const gapAnalysis = analystResult!.data;
 
-    // Stage 2 — Analyst
-    let analystResult;
-    try {
-      analystResult = await analyst.execute(context, outputDir);
-      if (!analystResult.success) {
-        logError(analystResult.agentName, 'Analysis', analystResult.error || 'Unknown error');
-      }
-      logStep(analystResult.agentName, analystResult.outputFile, analystResult.success);
-
-      // ── Layer 2: Gap Engine — Hybrid Matching ─────────────────────────────────
-      const gapAnalysisPath = analystResult.outputFile;
-      if (fs.existsSync(gapAnalysisPath)) {
-        const gapData = JSON.parse(fs.readFileSync(gapAnalysisPath, 'utf-8'));
+    // ── Layer 2: Gap Engine — Hybrid Matching ─────────────────────────────────
+    const gapData = gapAnalysis;
 
         function getRequirementWeight(requirement: string): number {
           switch (requirement) {
@@ -182,13 +178,13 @@
         else applyDecision = "skip";
 
         // Write decision.json
-        const decisionContent = {
+        const rankingDecision = {
           applyDecision,
           hardCoverage: parseFloat(hardCoverage.toFixed(2))
         };
         const decisionWritePath = path.join(outputDir, 'decision.json');
-        fs.writeFileSync(decisionWritePath, JSON.stringify(decisionContent, null, 2));
-        console.log(`\n  ⚖️  Decision reached: ${applyDecision} (Coverage: ${decisionContent.hardCoverage})`);
+        fs.writeFileSync(decisionWritePath, JSON.stringify(rankingDecision, null, 2));
+        console.log(`\n  ⚖️  Decision reached: ${applyDecision} (Coverage: ${rankingDecision.hardCoverage})`);
 
         // Calculate and write job-score.json
         const jobId = `${context.company}-${context.role}`.toLowerCase().replace(/\s+/g, '-');
@@ -197,59 +193,76 @@
         const scorePath = path.join(outputDir, 'job-score.json');
         fs.writeFileSync(scorePath, JSON.stringify(jobScore, null, 2));
         console.log(`  📊 Scoring completed → ${path.relative(process.cwd(), scorePath)}`);
-      }
-    } catch (err: any) {
-      logError('Analyst', 'Analysis', err.message);
-    }
 
-    // ── Step 6.5: Execution Control ───────────────────────────────────────────
-    let skipDownstream = false;
-    const decisionPath = path.join(outputDir, 'decision.json');
-    if (fs.existsSync(decisionPath)) {
-      const decisionData = JSON.parse(fs.readFileSync(decisionPath, 'utf-8'));
-      if (decisionData.applyDecision === 'skip') {
-        console.log('  ⏭  Skipping Writer & Interviewer (decision = skip)');
-        skipDownstream = true;
-      }
-    }
+  // ── Step 7: Final Result ──────────────────────────────────────────────────
+  const decisionContent: ApplicationDecision = {
+    applyDecision,
+    hardCoverage: parseFloat(hardCoverage.toFixed(2))
+  };
 
-  if (!skipDownstream) {
-    // Stage 3 — Writer
-    let writerResult;
-    try {
-      writerResult = await writer.execute(context, outputDir);
-      if (!writerResult.success) {
-        logError(writerResult.agentName, 'Writing', writerResult.error || 'Unknown error');
-      }
-      logStep(writerResult.agentName, writerResult.outputFile, writerResult.success);
-    } catch (err: any) {
-      logError('Writer', 'Writing', err.message);
-    }
-
-    // Stage 4 — Interviewer
-    let interviewResult;
-    try {
-      interviewResult = await interviewer.execute(context, outputDir);
-      if (!interviewResult.success) {
-        logError(interviewResult.agentName, 'Interview Prep', interviewResult.error || 'Unknown error');
-      }
-      logStep(interviewResult.agentName, interviewResult.outputFile, interviewResult.success);
-    } catch (err: any) {
-      logError('Interviewer', 'Interview Prep', err.message);
-    }
+  if (decisionContent.applyDecision === 'skip') {
+    console.log('  ⏭  Decision is skip — materials generation skipped');
+    return {
+      decision: decisionContent,
+      gapAnalysis,
+      companyBrief,
+      summary: ''
+    };
   }
 
-    // ── Step 7: Summary ───────────────────────────────────────────────────────
-    console.log('\n✨ Pipeline completed successfully!');
-    console.log(`📁 All outputs saved to: ${path.relative(process.cwd(), outputDir)}\n`);
+  return {
+    decision: decisionContent,
+    gapAnalysis,
+    companyBrief,
+    summary: ''
+  };
+}
 
-    // List all generated files for visibility
-    const generatedFiles = fs.readdirSync(outputDir);
-    generatedFiles.forEach(f => console.log(`   → ${f}`));
-    console.log('');
+export async function runMaterials(
+  orchConfig: OrchestratorConfig,
+  companyBrief: string,
+  gapAnalysis: GapAnalysis
+): Promise<ApplicationMaterials> {
+  const llmClient: LLMClient = new ClaudeClient();
+  const writer = new WriterAgent(llmClient);
+  const interviewer = new InterviewerAgent(llmClient);
 
-    return outputDir;
+  const context: ApplicationContext = {
+    company: orchConfig.company,
+    role: orchConfig.role,
+    date: new Date().toISOString().split('T')[0],
+    jobDescription: orchConfig.jobDescription,
+    baseCv: orchConfig.baseCv
+  };
+
+  console.log('📝 Generating tailored materials...');
+
+  const writerResult = await writer.execute(context, companyBrief, gapAnalysis);
+  if (!writerResult.success) {
+    throw new Error(`Writer failed: ${writerResult.error}`);
   }
+  logStep(writerResult.agentName, writerResult.success);
+
+  const { tailoredCv, coverLetter } = writerResult.data;
+
+  const interviewerResult = await interviewer.execute(
+    context,
+    companyBrief,
+    gapAnalysis,
+    tailoredCv,
+    coverLetter
+  );
+  if (!interviewerResult.success) {
+    throw new Error(`Interviewer failed: ${interviewerResult.error}`);
+  }
+  logStep(interviewerResult.agentName, interviewerResult.success);
+
+  return {
+    tailoredCv,
+    coverLetter,
+    interviewPrep: interviewerResult.data
+  };
+}
 
   /**
    * Executes the AppliCraft pipeline for multiple jobs sequentially.
@@ -310,21 +323,24 @@
   // ─── CLI Entry Point ─────────────────────────────────────────────────────────
 
   if (require.main === module) {
-    const job = matter(fs.readFileSync(config.jobDescriptionPath, 'utf-8'));
-    if (!job.data.company || !job.data.role) {
-      throw new Error('Missing company or role in job-description frontmatter');
-    }
-    const orchConfig: OrchestratorConfig = {
-      company: job.data.company,
-      role: job.data.role,
-      jobDescription: job.content.trim(),
-      baseCvPath: config.baseCvPath,
-    };
-
-    runApplication(orchConfig).then(() => {
-      generateJobRankings();
-    }).catch((err) => {
-      console.error('\n💥 Fatal pipeline error:', err.message);
-      process.exit(1);
-    });
+  const job = matter(fs.readFileSync(config.jobDescriptionPath, 'utf-8'));
+  if (!job.data.company || !job.data.role) {
+    throw new Error('Missing company or role in job-description frontmatter');
   }
+
+  const cvContent = fs.readFileSync(config.baseCvPath, 'utf-8');
+
+  const orchConfig: OrchestratorConfig = {
+    company: job.data.company,
+    role: job.data.role,
+    jobDescription: job.content.trim(),
+    baseCv: cvContent,
+  };
+
+  runApplication(orchConfig).then(() => {
+    generateJobRankings();
+  }).catch((err) => {
+    console.error('\n💥 Fatal pipeline error:', err.message);
+    process.exit(1);
+  });
+}
