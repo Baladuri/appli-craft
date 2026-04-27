@@ -9,7 +9,7 @@ import {
 } from './core/types';
 import { LLMClient } from './clients/LLMClient';
 import { ClaudeClient } from './core/claude-client';
-import { ResearcherAgent } from './agents/researcher.agent';
+import { ResearcherAgent, ResearcherOutput } from './agents/researcher.agent';
 import { AnalystAgent } from './agents/analyst.agent';
 import { WriterAgent } from './agents/writer.agent';
 import { InterviewerAgent } from './agents/interviewer.agent';
@@ -46,8 +46,7 @@ function logStep(agentName: string, success: boolean): void {
    */
 export async function runApplication(orchConfig: OrchestratorConfig): Promise<PipelineResult> {
   console.log('\n🚀 Starting AppliCraft Pipeline...');
-  console.log(`   Company : ${orchConfig.company}`);
-  console.log(`   Role    : ${orchConfig.role}`);
+  console.log(`   Processing job...`);
   console.log('');
 
   // ── Step 1: Validate Configuration ────────────────────────────────────────
@@ -59,42 +58,29 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<Pi
 
   console.log(`🤖 Services initialized (Mock Mode: ${config.mockMode})`);
 
-  // ── Step 3: Create Output Directory (for rankings only) ───────────────────
-  const date = new Date().toISOString().split('T')[0];
-  const outputDir = path.join(
-    config.outputBaseDir,
-    'applications',
-    `${orchConfig.company}-${orchConfig.role}-${date}`
-      .toLowerCase()
-      .replace(/\s+/g, '-')
-  );
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
-  }
-
-  console.log(`📂 Rankings directory: ${path.relative(process.cwd(), outputDir)}\n`);
-
-  // ── Step 4: Build ApplicationContext ──────────────────────────────────────
-  const context: ApplicationContext = {
-    company: orchConfig.company,
-    role: orchConfig.role,
-    date,
-    jobDescription: orchConfig.jobDescription,
-    baseCv: orchConfig.baseCv,
-  };
-
-  // ── Step 5: Instantiate Core Agents ───────────────────────────────────────
+  // ── Step 3: Instantiate Agents ───────────────────────────────────────────
   const researcher = new ResearcherAgent(llmClient);
   const analyst = new AnalystAgent(llmClient);
 
   console.log('🔗 Running pipeline...\n');
+
+  // ── Step 4: Run Stages ──────────────────────────────────────────────────
 
     // ── Step 6: Sequential Pipeline Execution ─────────────────────────────────
 
   // Stage 1 — Researcher
   let researcherResult;
   try {
-    researcherResult = await researcher.execute(context);
+    // Note: We use raw orchConfig values for the initial context
+    const initialContext: ApplicationContext = {
+      company: orchConfig.company,
+      role: orchConfig.role,
+      date: new Date().toISOString().split('T')[0],
+      jobDescription: orchConfig.jobDescription,
+      baseCv: orchConfig.baseCv,
+    };
+
+    researcherResult = await researcher.execute(initialContext);
     if (!researcherResult.success) {
       logError(researcherResult.agentName, 'Research', researcherResult.error || 'Unknown error');
     }
@@ -102,7 +88,41 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<Pi
   } catch (err: any) {
     logError('Researcher', 'Research', err.message);
   }
-  const companyBrief = researcherResult!.data;
+  
+  const researcherData: ResearcherOutput = researcherResult!.data;
+  const companyBrief = researcherData.brief;
+  const extractedCompany = researcherData.company;
+  const extractedRole = researcherData.role;
+
+  console.log(`  🏢 Company: ${extractedCompany}`);
+  console.log(`  💼 Role: ${extractedRole}`);
+
+  // ── Step 5: Setup Output Directory & Final Context ────────────────────────
+  const sanitize = (s: string) => s.toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 50);
+
+  const date = new Date().toISOString().split('T')[0];
+  const outputDir = path.join(
+    config.outputBaseDir,
+    'applications',
+    `${sanitize(extractedCompany)}-${sanitize(extractedRole)}-${date}`
+  );
+
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+
+  console.log(`  📂 Rankings directory: ${path.relative(process.cwd(), outputDir)}`);
+
+  const context: ApplicationContext = {
+    company: extractedCompany,
+    role: extractedRole,
+    date,
+    jobDescription: orchConfig.jobDescription,
+    baseCv: orchConfig.baseCv,
+  };
 
   // Stage 2 — Analyst
   let analystResult;
@@ -187,7 +207,7 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<Pi
         console.log(`\n  ⚖️  Decision reached: ${applyDecision} (Coverage: ${rankingDecision.hardCoverage})`);
 
         // Calculate and write job-score.json
-        const jobId = `${context.company}-${context.role}`.toLowerCase().replace(/\s+/g, '-');
+        const jobId = `${sanitize(extractedCompany)}-${sanitize(extractedRole)}`;
         const jobScore = calculateJobScore(jobId, hardCoverage);
 
         const scorePath = path.join(outputDir, 'job-score.json');

@@ -25,14 +25,14 @@ const PERSISTENT_CV_HASH_PATH = path.join(__dirname, '../data/candidate-cv.hash'
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-function extractCompanyFromJD(jd: string): string {
-  const lines = jd.split('\n').filter(l => l.trim().length > 0);
-  return lines[0]?.trim().substring(0, 50) || 'Unknown-Company';
-}
-
-function extractRoleFromJD(jd: string): string {
-  const lines = jd.split('\n').filter(l => l.trim().length > 0);
-  return lines[1]?.trim().substring(0, 50) || 'Unknown-Role';
+function stripFrontmatter(text: string): string {
+  const lines = text.split('\n');
+  if (lines[0]?.trim() !== '---') return text;
+  const closingIndex = lines.findIndex(
+    (line, i) => i > 0 && line.trim() === '---'
+  );
+  if (closingIndex === -1) return text;
+  return lines.slice(closingIndex + 1).join('\n').trim();
 }
 
 // ─── Endpoints ──────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ app.get('/cv', (req, res) => {
 });
 
 app.post('/analyze', async (req, res) => {
-  const { jobDescription, company, role } = req.body;
+  const { jobDescription } = req.body;
 
   if (!jobDescription) {
     return res.status(400).json({ error: 'jobDescription is required' });
@@ -83,11 +83,12 @@ app.post('/analyze', async (req, res) => {
 
   try {
     const baseCv = fs.readFileSync(PERSISTENT_CV_PATH, 'utf-8');
+    const cleanJD = stripFrontmatter(jobDescription);
 
     const orchConfig: OrchestratorConfig = {
-      company: company || extractCompanyFromJD(jobDescription),
-      role: role || extractRoleFromJD(jobDescription),
-      jobDescription,
+      company: '',
+      role: '',
+      jobDescription: cleanJD,
       baseCv
     };
 
@@ -119,9 +120,7 @@ Rules:
     const summary = await llmClient.generateText(summaryPrompt);
 
     // Store session for on-demand material generation
-    const sessionId = `${orchConfig.company}-${orchConfig.role}-${Date.now()}`
-      .toLowerCase()
-      .replace(/\s+/g, '-');
+    const sessionId = `session-${Date.now()}`;
 
     sessions.set(sessionId, {
       orchConfig,
@@ -199,9 +198,9 @@ app.post('/analyze/batch', async (req, res) => {
     const baseCv = fs.readFileSync(PERSISTENT_CV_PATH, 'utf-8');
 
     const configs: OrchestratorConfig[] = jobs.map((job: any) => ({
-      company: job.company || extractCompanyFromJD(job.jobDescription),
-      role: job.role || extractRoleFromJD(job.jobDescription),
-      jobDescription: job.jobDescription,
+      company: '',
+      role: '',
+      jobDescription: stripFrontmatter(job.jobDescription),
       baseCv
     }));
 
