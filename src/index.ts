@@ -236,7 +236,9 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<Pi
       decision: decisionContent,
       gapAnalysis,
       companyBrief,
-      summary: ''
+      summary: '',
+      company: extractedCompany,
+      role: extractedRole
     };
   }
 
@@ -244,7 +246,9 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<Pi
     decision: decisionContent,
     gapAnalysis,
     companyBrief,
-    summary: ''
+    summary: '',
+    company: extractedCompany,
+    role: extractedRole
   };
 }
 
@@ -299,19 +303,34 @@ export async function runMaterials(
    * 
    * @param configs - Array of OrchestratorConfig
    */
-  export async function runApplicationBatch(configs: OrchestratorConfig[]): Promise<void> {
-    for (const config of configs) {
-      console.log(`\n=== Processing ${config.company} - ${config.role} ===`);
-      try {
-        await runApplication(config);
-      } catch (err: any) {
-        console.error(`  ❌ Failed processing ${config.company}: ${err.message}`);
-        // We continue to the next job in the batch even if one fails
-      }
-      console.log(`=== Done ===\n`);
+export async function runApplicationBatch(
+  configs: OrchestratorConfig[]
+): Promise<PipelineResult[]> {
+  const results: PipelineResult[] = [];
+
+  for (const config of configs) {
+    console.log(`\n=== Processing job ${results.length + 1} of ${configs.length} ===`);
+    try {
+      const result = await runApplication(config);
+      results.push(result);
+    } catch (err: any) {
+      console.error(`  ❌ Failed: ${err.message}`);
+      // Push a failed result placeholder so indices stay aligned
+        results.push({
+          decision: { applyDecision: 'skip', hardCoverage: 0 },
+          gapAnalysis: { requiredSkills: [], candidateSkills: [] },
+          companyBrief: '',
+          summary: '',
+          company: '',
+          role: ''
+        });
     }
-    generateJobRankings();
+    console.log(`=== Done ===\n`);
   }
+
+  generateJobRankings();
+  return results;
+}
 
   // ─── Ranking Aggregation ──────────────────────────────────────────────────────
 

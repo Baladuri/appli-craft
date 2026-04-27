@@ -1,7 +1,7 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ApiService } from '../api.service';
-import { JobSkill, CandidateSkill, BatchRanking } from '../models';
+import { JobSkill, CandidateSkill, BatchRanking, BatchJobResult } from '../models';
 import { FormsModule } from '@angular/forms';
 
 @Component({
@@ -39,6 +39,7 @@ export class JobAnalysisComponent implements OnInit {
   // ── Batch analysis state ──────────────────────────────────────────
   batchInput: string = '';
   batchResults: BatchRanking[] = [];
+  batchJobs: BatchJobResult[] = [];
 
   constructor(
     private apiService: ApiService,
@@ -185,6 +186,23 @@ export class JobAnalysisComponent implements OnInit {
 
     this.apiService.analyzeBatch(jobs).subscribe({
       next: (res) => {
+        this.batchJobs = ((res.jobs || []) as any[])
+          .map((job: any) => ({
+            sessionId: job.sessionId,
+            company: job.company,
+            role: job.role,
+            decision: job.decision,
+            coverage: job.coverage,
+            gapAnalysis: job.gapAnalysis,
+            summary: job.summary,
+            materials: null,
+            generatingMaterials: false,
+            showSkillDetail: false
+          }))
+          .sort((a: BatchJobResult, b: BatchJobResult) =>
+            b.coverage - a.coverage
+          );
+
         this.batchResults = res.rankings || [];
         this.loading = false;
         this.cdr.detectChanges();
@@ -207,5 +225,28 @@ export class JobAnalysisComponent implements OnInit {
       .split('-')
       .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
+  }
+
+  toggleBatchSkillDetail(job: BatchJobResult): void {
+    job.showSkillDetail = !job.showSkillDetail;
+  }
+
+  onGenerateBatchMaterials(job: BatchJobResult): void {
+    if (!job.sessionId) return;
+    job.generatingMaterials = true;
+    this.error = null;
+
+    this.apiService.generateMaterials(job.sessionId).subscribe({
+      next: (res) => {
+        job.materials = res;
+        job.generatingMaterials = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.error = 'Failed to generate materials. Please try again.';
+        job.generatingMaterials = false;
+        this.cdr.detectChanges();
+      }
+    });
   }
 }

@@ -204,19 +204,74 @@ app.post('/analyze/batch', async (req, res) => {
       baseCv
     }));
 
-    await runApplicationBatch(configs);
+    const pipelineResults = await runApplicationBatch(configs);
 
+    // Generate summary and session per job
+    const llmClient = new ClaudeClient();
+
+    const enrichedJobs = await Promise.all(
+      pipelineResults.map(async (result, index) => {
+        const sessionId = `session-${Date.now()}-${index}`;
+
+        const orchConfig = configs[index];
+
+        sessions.set(sessionId, {
+          orchConfig,
+          companyBrief: result.companyBrief,
+          gapAnalysis: result.gapAnalysis
+        });
+
+        // Generate summary paragraph
+        const summaryPrompt = `You are a career advisor giving honest direct advice.
+
+Based on this job fit analysis write a 3-4 sentence paragraph
+telling the candidate whether to apply and exactly why.
+
+Decision: ${result.decision.applyDecision}
+Coverage score: ${result.decision.hardCoverage}
+
+Required skills:
+${JSON.stringify(result.gapAnalysis.requiredSkills, null, 2)}
+
+Rules:
+- Be direct and specific, name actual skills
+- Start with the strongest point in their favour
+- Name the specific gap if there is one
+- End with a clear recommendation and one specific action
+- Do not use bullet points
+- Do not mention coverage scores or percentages
+- Write as if talking to the candidate directly
+- Maximum 4 sentences`;
+
+        const summary = await llmClient.generateText(summaryPrompt);
+
+        return {
+          sessionId,
+          company: result.company,
+          role: result.role,
+          decision: result.decision.applyDecision,
+          coverage: result.decision.hardCoverage,
+          gapAnalysis: result.gapAnalysis,
+          summary
+        };
+      })
+    );
+
+    // Read rankings file
     const rankingsPath = path.join(
       __dirname,
       '../applications/job-rankings.json'
     );
 
-    if (fs.existsSync(rankingsPath)) {
-      const rankings = JSON.parse(fs.readFileSync(rankingsPath, 'utf-8'));
-      res.json({ rankings });
-    } else {
-      res.json({ message: 'Batch completed. No rankings file found.' });
-    }
+    const rankings = fs.existsSync(rankingsPath)
+      ? JSON.parse(fs.readFileSync(rankingsPath, 'utf-8'))
+      : [];
+
+    res.json({
+      rankings,
+      jobs: enrichedJobs
+    });
+
   } catch (error: any) {
     console.error('Batch analysis failed:', error);
     res.status(500).json({

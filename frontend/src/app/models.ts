@@ -26,3 +26,20 @@ export interface BatchRanking {
   score: number;
   decision: "apply" | "maybe" | "skip";
 }
+
+export interface BatchJobResult {
+  sessionId: string;
+  company: string;
+  role: string;
+  decision: "apply" | "maybe" | "skip";
+  coverage: number;
+  gapAnalysis: GapAnalysis;
+  summary: string;
+  materials: {
+    tailoredCv: string;
+    coverLetter: string;
+    interviewPrep: string;
+  } | null;
+  generatingMaterials: boolean;
+  showSkillDetail: boolean;
+}

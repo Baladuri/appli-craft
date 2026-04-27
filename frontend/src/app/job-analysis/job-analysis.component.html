@@ -75,11 +75,11 @@
           <div class="coverage-bar">
             <div
               class="coverage-fill"
-              [style.width.%]="coverage">
+              [style.width.%]="coverage  * 100">
             </div>
           </div>
           <span class="coverage-label">
-            {{ coverage | number:'1.0-0' }}% match
+            {{ coverage  * 100  | number:'1.0-0' }}% match
           </span>
         </div>
       </div>
@@ -203,31 +203,123 @@ Paste third job description here..."
     </section>
 
     <!-- BATCH RESULTS -->
-    <section *ngIf="batchResults.length > 0" class="results-section">
+    <section *ngIf="batchJobs.length > 0" class="results-section">
       <h2>Results — ranked by fit</h2>
       <div class="batch-results-list">
         <div
-          *ngFor="let result of batchResults; let i = index"
+          *ngFor="let job of batchJobs; let i = index"
           class="batch-result-card"
-          [ngClass]="result.decision">
+          [ngClass]="job.decision">
+
           <div class="batch-rank">#{{ i + 1 }}</div>
+
           <div class="batch-result-body">
-            <div class="batch-job-id">{{ result.company }}</div>
-            <div class="batch-job-role">{{ result.role }}</div>
+
+            <!-- Header -->
+            <div class="batch-job-id">{{ job.company }}</div>
+            <div class="batch-job-role">{{ job.role }}</div>
             <div class="batch-decision-badge">
-              {{ result.decision | uppercase }}
+              {{ job.decision | uppercase }}
             </div>
+
+            <!-- Coverage bar -->
             <div class="coverage-bar-wrapper">
               <div class="coverage-bar">
                 <div
                   class="coverage-fill"
-                  [style.width.%]="result.score">
+                  [style.width.%]="job.coverage * 100">
                 </div>
               </div>
               <span class="coverage-label">
-                {{ result.score | number:'1.0-0' }}% match
+                {{ job.coverage * 100 | number:'1.0-0' }}% match
               </span>
             </div>
+
+            <!-- Summary -->
+            <p class="summary-text">{{ job.summary }}</p>
+
+            <!-- Materials section — apply or maybe only -->
+            <div *ngIf="job.decision === 'apply' || job.decision === 'maybe'"
+                 class="materials-section">
+
+              <div *ngIf="!job.materials && !job.generatingMaterials">
+                <button class="generate-btn"
+                  (click)="onGenerateBatchMaterials(job)">
+                  Generate Application Materials
+                </button>
+              </div>
+
+              <div *ngIf="job.generatingMaterials" class="generating-state">
+                Generating your tailored CV, cover letter and interview prep...
+              </div>
+
+              <div *ngIf="job.materials && !job.generatingMaterials"
+                   class="download-buttons">
+                <button class="download-btn"
+                  (click)="downloadFile(job.materials.tailoredCv, 'tailored-cv-' + job.company + '.md')">
+                  Download Tailored CV
+                </button>
+                <button class="download-btn"
+                  (click)="downloadFile(job.materials.coverLetter, 'cover-letter-' + job.company + '.md')">
+                  Download Cover Letter
+                </button>
+                <button class="download-btn"
+                  (click)="downloadFile(job.materials.interviewPrep, 'interview-prep-' + job.company + '.md')">
+                  Download Interview Prep
+                </button>
+              </div>
+
+            </div>
+
+            <!-- Skill detail toggle -->
+            <div class="skill-toggle">
+              <button class="toggle-btn"
+                (click)="toggleBatchSkillDetail(job)">
+                {{ job.showSkillDetail ? 'Hide skill breakdown' 
+                                       : 'View skill breakdown' }}
+              </button>
+            </div>
+
+            <div *ngIf="job.showSkillDetail" class="skill-detail">
+              <div class="grid">
+
+                <section class="column">
+                  <h3>Your Skills</h3>
+                  <div class="list">
+                    <div
+                      *ngFor="let skill of job.gapAnalysis.candidateSkills"
+                      class="card">
+                      <div class="card-header">
+                        <span class="name">{{ skill.name }}</span>
+                      </div>
+                      <div class="confidence">
+                        {{ skill.confidence | percent }}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="column">
+                  <h3>Job Requirements</h3>
+                  <div class="list">
+                    <div
+                      *ngFor="let skill of job.gapAnalysis.requiredSkills"
+                      class="card">
+                      <div class="card-header">
+                        <span class="name">{{ skill.name }}</span>
+                      </div>
+                      <div class="badge-row">
+                        <span class="badge" [ngClass]="skill.requirement">
+                          {{ skill.requirement }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+              </div>
+            </div>
+
           </div>
         </div>
       </div>

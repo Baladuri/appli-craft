@@ -49,6 +49,8 @@ export interface PipelineResult {
   gapAnalysis: GapAnalysis;
   companyBrief: string;
   summary: string;
+  company: string;
+  role: string;
 }
 
 export interface SemanticMatch {
