@@ -1,6 +1,5 @@
 export interface JobSkill {
   name: string;
-  type: "hard" | "soft" | "implicit";
   requirement: "required" | "preferred" | "implicit";
   evidence: string;
 }
@@ -18,4 +17,12 @@ export interface GapAnalysis {
 export interface JobScore {
   decision: "apply" | "maybe" | "skip";
   score: number;
+}
+
+export interface BatchRanking {
+  jobId: string;
+  company: string;
+  role: string;
+  score: number;
+  decision: "apply" | "maybe" | "skip";
 }

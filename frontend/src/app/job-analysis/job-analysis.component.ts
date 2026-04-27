@@ -1,7 +1,7 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ApiService } from '../api.service';
-import { JobSkill, CandidateSkill, JobScore } from '../models';
+import { JobSkill, CandidateSkill, BatchRanking } from '../models';
 import { FormsModule } from '@angular/forms';
 
 @Component({
@@ -12,22 +12,23 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './job-analysis.component.css'
 })
 export class JobAnalysisComponent implements OnInit {
-  cvText: string = '';
-  jobDescription: string = '';
 
+  // ── Shared state ──────────────────────────────────────────────────
+  cvText: string = '';
+  cvSaved: boolean = false;
+  loading: boolean = false;
+  error: string | null = null;
+  mode: 'single' | 'batch' = 'single';
+
+  // ── Single analysis state ─────────────────────────────────────────
+  jobDescription: string = '';
   summary: string = '';
   decision: string = '';
   coverage: number = 0;
   sessionId: string = '';
   showSkillDetail: boolean = false;
-  cvSaved: boolean = false;
-
   candidateSkills: CandidateSkill[] = [];
   jobSkills: JobSkill[] = [];
-  jobScore: JobScore | null = null;
-  loading = false;
-  error: string | null = null;
-
   generatingMaterials: boolean = false;
   materials: {
     tailoredCv: string;
@@ -35,9 +36,23 @@ export class JobAnalysisComponent implements OnInit {
     interviewPrep: string;
   } | null = null;
 
-  constructor(private apiService: ApiService, private cdr: ChangeDetectorRef) {}
+  // ── Batch analysis state ──────────────────────────────────────────
+  batchInput: string = '';
+  batchResults: BatchRanking[] = [];
+
+  constructor(
+    private apiService: ApiService,
+    private cdr: ChangeDetectorRef
+  ) {}
 
   ngOnInit(): void {}
+
+  // ── Shared methods ────────────────────────────────────────────────
+
+  setMode(mode: 'single' | 'batch'): void {
+    this.mode = mode;
+    this.error = null;
+  }
 
   onSaveCV(): void {
     if (!this.cvText) return;
@@ -53,12 +68,13 @@ export class JobAnalysisComponent implements OnInit {
     });
   }
 
+  // ── Single analysis methods ───────────────────────────────────────
+
   onAnalyze(): void {
     if (!this.jobDescription) {
       this.error = 'Please provide a Job Description';
       return;
     }
-
     this.loading = true;
     this.error = null;
     this.summary = '';
@@ -77,8 +93,8 @@ export class JobAnalysisComponent implements OnInit {
         this.cdr.detectChanges();
       },
       error: (err) => {
-        console.error('Analysis failed:', err);
-        this.error = err.error?.error || 'Analysis failed. Please ensure you saved your CV first.';
+        this.error = err.error?.error ||
+          'Analysis failed. Please ensure you saved your CV first.';
         this.loading = false;
         this.cdr.detectChanges();
       }
@@ -124,5 +140,72 @@ export class JobAnalysisComponent implements OnInit {
 
   deleteJobSkill(index: number): void {
     this.jobSkills.splice(index, 1);
+  }
+
+  // ── Batch analysis methods ────────────────────────────────────────
+
+  onAnalyzeBatch(): void {
+    if (!this.batchInput.trim()) {
+      this.error = 'Please paste at least one job description';
+      return;
+    }
+
+    const separator = '===';
+    
+    const stripFrontmatter = (text: string): string => {
+      const lines = text.split('\n');
+      if (lines[0].trim() !== '---') return text;
+      const closingIndex = lines.findIndex(
+        (line, i) => i > 0 && line.trim() === '---'
+      );
+      if (closingIndex === -1) return text;
+      return lines.slice(closingIndex + 1).join('\n').trim();
+    };
+
+    const jobs = this.batchInput
+      .split(separator)
+      .map(jd => jd.trim())
+      .filter(jd => jd.length > 0)
+      .map(jd => ({ jobDescription: stripFrontmatter(jd) }))
+      .filter(jd => jd.jobDescription.length > 0);
+
+    if (jobs.length === 0) {
+      this.error = 'No valid job descriptions found';
+      return;
+    }
+
+    if (jobs.length > 10) {
+      this.error = 'Maximum 10 jobs per batch';
+      return;
+    }
+
+    this.loading = true;
+    this.error = null;
+    this.batchResults = [];
+
+    this.apiService.analyzeBatch(jobs).subscribe({
+      next: (res) => {
+        this.batchResults = res.rankings || [];
+        this.loading = false;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.error = err.error?.error ||
+          'Batch analysis failed. Please ensure you saved your CV first.';
+        this.loading = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  getDecisionClass(decision: string): string {
+    return decision;
+  }
+
+  formatJobId(jobId: string): string {
+    return jobId
+      .split('-')
+      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   }
 }

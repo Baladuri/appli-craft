@@ -17,6 +17,7 @@ import { normalize, matchSkill } from './core/matcher';
 import { calculateJobScore } from './core/scoring';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import matter from 'gray-matter';
 
 
@@ -106,7 +107,6 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<Pi
   const date = new Date().toISOString().split('T')[0];
   const outputDir = path.join(
     config.outputBaseDir,
-    'applications',
     `${sanitize(extractedCompany)}-${sanitize(extractedRole)}-${date}`
   );
 
@@ -207,8 +207,18 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<Pi
         console.log(`\n  ⚖️  Decision reached: ${applyDecision} (Coverage: ${rankingDecision.hardCoverage})`);
 
         // Calculate and write job-score.json
-        const jobId = `${sanitize(extractedCompany)}-${sanitize(extractedRole)}`;
-        const jobScore = calculateJobScore(jobId, hardCoverage);
+        const jobId = crypto
+          .createHash('md5')
+          .update(orchConfig.jobDescription)
+          .digest('hex')
+          .substring(0, 12);
+
+        const jobScore = calculateJobScore(
+          jobId,
+          extractedCompany,
+          extractedRole,
+          hardCoverage
+        );
 
         const scorePath = path.join(outputDir, 'job-score.json');
         fs.writeFileSync(scorePath, JSON.stringify(jobScore, null, 2));
@@ -309,7 +319,7 @@ export async function runMaterials(
     const applicationsDir = config.outputBaseDir;
     if (!fs.existsSync(applicationsDir)) return;
 
-    const map = new Map<string, { jobId: string; score: number; decision: string }>();
+    const map = new Map<string, { jobId: string; company: string; role: string; score: number; decision: string }>();
 
     const entries = fs.readdirSync(applicationsDir, { withFileTypes: true });
     for (const entry of entries) {
@@ -321,6 +331,8 @@ export async function runMaterials(
             if (scoreData.jobId && typeof scoreData.score === 'number' && scoreData.decision) {
               map.set(scoreData.jobId, {
                 jobId: scoreData.jobId,
+                company: scoreData.company || 'Unknown',
+                role: scoreData.role || 'Unknown',
                 score: scoreData.score,
                 decision: scoreData.decision
               });

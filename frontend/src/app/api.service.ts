@@ -30,4 +30,8 @@ export class ApiService {
   generateMaterials(sessionId: string): Observable<any> {
     return this.http.post<any>(`${this.baseUrl}/generate-materials`, { sessionId });
   }
+
+  analyzeBatch(jobs: { jobDescription: string }[]): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/analyze/batch`, { jobs });
+  }
 }
