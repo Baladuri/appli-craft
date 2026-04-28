@@ -1,8 +1,16 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ApiService } from '../api.service';
-import { JobSkill, CandidateSkill, BatchRanking, BatchJobResult } from '../models';
+import { JobQueueItem } from '../models';
 import { FormsModule } from '@angular/forms';
+
+// Blocked portal domains
+const BLOCKED_DOMAINS = [
+  'linkedin.com',
+  'indeed.com',
+  'glassdoor.com',
+  'xing.com'
+];
 
 @Component({
   selector: 'app-job-analysis',
@@ -13,37 +21,15 @@ import { FormsModule } from '@angular/forms';
 })
 export class JobAnalysisComponent implements OnInit {
 
-  // ── Shared state ──────────────────────────────────────────────────
+  // ── CV state ──────────────────────────────────────────────────────
   cvText: string = '';
   cvSaved: boolean = false;
-  loading: boolean = false;
+
+  // ── Queue state ───────────────────────────────────────────────────
+  currentInput: string = '';
+  jobs: JobQueueItem[] = [];
+  isProcessing: boolean = false;
   error: string | null = null;
-  mode: 'single' | 'batch' = 'single';
-
-  // ── Single analysis state ─────────────────────────────────────────
-  jobDescription: string = '';
-  summary: string = '';
-  decision: string = '';
-  coverage: number = 0;
-  sessionId: string = '';
-  showSkillDetail: boolean = false;
-  candidateSkills: CandidateSkill[] = [];
-  jobSkills: JobSkill[] = [];
-  generatingMaterials: boolean = false;
-  materials: {
-    tailoredCv: string;
-    coverLetter: string;
-    interviewPrep: string;
-  } | null = null;
-
-  // ── Batch analysis state ──────────────────────────────────────────
-  batchInput: string = '';
-  batchResults: BatchRanking[] = [];
-  batchJobs: BatchJobResult[] = [];
-
-  // ── URL fetch state ──────────────────────────────────────────────
-  fetchingJD: boolean = false;
-  fetchError: string | null = null;
 
   constructor(
     private apiService: ApiService,
@@ -52,12 +38,7 @@ export class JobAnalysisComponent implements OnInit {
 
   ngOnInit(): void {}
 
-  // ── Shared methods ────────────────────────────────────────────────
-
-  setMode(mode: 'single' | 'batch'): void {
-    this.mode = mode;
-    this.error = null;
-  }
+  // ── CV methods ────────────────────────────────────────────────────
 
   onSaveCV(): void {
     if (!this.cvText) return;
@@ -73,71 +54,7 @@ export class JobAnalysisComponent implements OnInit {
     });
   }
 
-  // ── Single analysis methods ───────────────────────────────────────
-
-  onAnalyze(): void {
-    if (!this.jobDescription) {
-      this.error = 'Please provide a Job Description';
-      return;
-    }
-    this.loading = true;
-    this.error = null;
-    this.summary = '';
-    this.materials = null;
-    this.sessionId = '';
-
-    this.apiService.analyze(this.jobDescription).subscribe({
-      next: (res) => {
-        this.sessionId = res.sessionId;
-        this.summary = res.summary;
-        this.decision = res.decision;
-        this.coverage = res.coverage;
-        this.candidateSkills = res.gapAnalysis.candidateSkills;
-        this.jobSkills = res.gapAnalysis.requiredSkills;
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-      error: (err) => {
-        this.error = err.error?.error ||
-          'Analysis failed. Please ensure you saved your CV first.';
-        this.loading = false;
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  onGenerateMaterials(): void {
-    if (!this.sessionId) return;
-    this.generatingMaterials = true;
-    this.error = null;
-
-    this.apiService.generateMaterials(this.sessionId).subscribe({
-      next: (res) => {
-        this.materials = res;
-        this.generatingMaterials = false;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.error = 'Failed to generate materials. Please try again.';
-        this.generatingMaterials = false;
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  downloadFile(content: string, filename: string): void {
-    const blob = new Blob([content], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  toggleSkillDetail(): void {
-    this.showSkillDetail = !this.showSkillDetail;
-  }
+  // ── Input helpers ─────────────────────────────────────────────────
 
   isUrl(text: string): boolean {
     try {
@@ -148,146 +65,179 @@ export class JobAnalysisComponent implements OnInit {
     }
   }
 
-  onSubmitJD(): void {
-    const input = this.jobDescription.trim();
-
-    if (!input) {
-      this.error = 'Please provide a Job Description';
-      return;
-    }
-
-    if (this.isUrl(input)) {
-      this.fetchingJD = true;
-      this.fetchError = null;
-      this.error = null;
-
-      this.apiService.fetchJD(input).subscribe({
-        next: (res) => {
-          this.jobDescription = res.jobDescription;
-          this.fetchingJD = false;
-          this.onAnalyze();
-        },
-        error: (err) => {
-          this.fetchingJD = false;
-          const code = err.error?.code;
-
-          if (code === 'PORTAL_BLOCKED') {
-            this.fetchError = 'This portal blocks automated access. Please paste the job description text below.';
-          } else if (code === 'NOT_FOUND') {
-            this.fetchError = 'Job listing not found — it may have expired.';
-          } else if (code === 'TIMEOUT') {
-            this.fetchError = 'Page took too long to load. Please paste the job description text below.';
-          } else {
-            this.fetchError = 'Could not fetch this page. Please paste the job description text below.';
-          }
-          this.cdr.detectChanges();
-        }
-      });
-    } else {
-      this.onAnalyze();
-    }
-  }
-
-  deleteCandidateSkill(index: number): void {
-    this.candidateSkills.splice(index, 1);
-  }
-
-  deleteJobSkill(index: number): void {
-    this.jobSkills.splice(index, 1);
-  }
-
-  // ── Batch analysis methods ────────────────────────────────────────
-
-  onAnalyzeBatch(): void {
-    if (!this.batchInput.trim()) {
-      this.error = 'Please paste at least one job description';
-      return;
-    }
-
-    const separator = '===';
-    
-    const stripFrontmatter = (text: string): string => {
-      const lines = text.split('\n');
-      if (lines[0].trim() !== '---') return text;
-      const closingIndex = lines.findIndex(
-        (line, i) => i > 0 && line.trim() === '---'
+  isBlockedPortal(url: string): boolean {
+    try {
+      const hostname = new URL(url).hostname.replace('www.', '');
+      return BLOCKED_DOMAINS.some(domain =>
+        hostname === domain || hostname.endsWith('.' + domain)
       );
-      if (closingIndex === -1) return text;
-      return lines.slice(closingIndex + 1).join('\n').trim();
+    } catch {
+      return false;
+    }
+  }
+
+  generateId(): string {
+    return Math.random().toString(36).substring(2, 10);
+  }
+
+  // ── Queue management ──────────────────────────────────────────────
+
+  onAddJob(): void {
+    const input = this.currentInput.trim();
+    if (!input) return;
+
+    const isUrl = this.isUrl(input);
+    const isBlocked = isUrl && this.isBlockedPortal(input);
+
+    const item: JobQueueItem = {
+      id: this.generateId(),
+      inputType: isUrl ? 'url' : 'text',
+      rawInput: input,
+      resolvedText: isUrl ? '' : input,
+      status: isBlocked ? 'blocked' : 'input',
+      errorMessage: null,
+      sessionId: null,
+      company: null,
+      role: null,
+      decision: null,
+      coverage: null,
+      summary: null,
+      gapAnalysis: null,
+      materials: null,
+      generatingMaterials: false,
+      showSkillDetail: false,
+      manualText: ''
     };
 
-    const jobs = this.batchInput
-      .split(separator)
-      .map(jd => jd.trim())
-      .filter(jd => jd.length > 0)
-      .map(jd => ({ jobDescription: stripFrontmatter(jd) }))
-      .filter(jd => jd.jobDescription.length > 0);
+    this.jobs.push(item);
+    this.currentInput = '';
+    this.cdr.detectChanges();
+  }
 
-    if (jobs.length === 0) {
-      this.error = 'No valid job descriptions found';
-      return;
+  onAddManualText(job: JobQueueItem): void {
+    if (!job.manualText.trim()) return;
+    job.resolvedText = job.manualText.trim();
+    job.inputType = 'text';
+    job.status = 'input';
+    this.cdr.detectChanges();
+  }
+
+  onRemoveJob(job: JobQueueItem): void {
+    this.jobs = this.jobs.filter(j => j.id !== job.id);
+    this.cdr.detectChanges();
+  }
+
+  onKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.onAddJob();
     }
+  }
 
-    if (jobs.length > 10) {
-      this.error = 'Maximum 10 jobs per batch';
-      return;
-    }
+  get readyJobs(): JobQueueItem[] {
+    return this.jobs.filter(j => j.status === 'input');
+  }
 
-    this.loading = true;
+  get hasResults(): boolean {
+    return this.jobs.some(j => j.status === 'done' || j.status === 'failed');
+  }
+
+  get doneJobs(): JobQueueItem[] {
+    return this.jobs
+      .filter(j => j.status === 'done')
+      .sort((a, b) => (b.coverage ?? 0) - (a.coverage ?? 0));
+  }
+
+  // ── Processing ────────────────────────────────────────────────────
+
+  async onAnalyzeAll(): Promise<void> {
+    const toProcess = this.jobs.filter(j => j.status === 'input');
+    if (toProcess.length === 0) return;
+
+    this.isProcessing = true;
     this.error = null;
-    this.batchResults = [];
 
-    this.apiService.analyzeBatch(jobs).subscribe({
-      next: (res) => {
-        this.batchJobs = ((res.jobs || []) as any[])
-          .map((job: any) => ({
-            sessionId: job.sessionId,
-            company: job.company,
-            role: job.role,
-            decision: job.decision,
-            coverage: job.coverage,
-            gapAnalysis: job.gapAnalysis,
-            summary: job.summary,
-            materials: null,
-            generatingMaterials: false,
-            showSkillDetail: false
-          }))
-          .sort((a: BatchJobResult, b: BatchJobResult) =>
-            b.coverage - a.coverage
-          );
-
-        this.batchResults = res.rankings || [];
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-      error: (err) => {
-        this.error = err.error?.error ||
-          'Batch analysis failed. Please ensure you saved your CV first.';
-        this.loading = false;
-        this.cdr.detectChanges();
-      }
+    // Mark all as queued
+    toProcess.forEach(j => {
+      j.status = 'queued';
     });
+    this.cdr.detectChanges();
+
+    // Process sequentially
+    for (const job of toProcess) {
+      await this.processJob(job);
+    }
+
+    this.isProcessing = false;
+    this.cdr.detectChanges();
   }
 
-  getDecisionClass(decision: string): string {
-    return decision;
+  private async processJob(job: JobQueueItem): Promise<void> {
+    try {
+      // Step 1 — Fetch URL if needed
+      if (job.inputType === 'url' && !job.resolvedText) {
+        job.status = 'fetching';
+        this.cdr.detectChanges();
+
+        await new Promise<void>((resolve, reject) => {
+          this.apiService.fetchJD(job.rawInput).subscribe({
+            next: (res) => {
+              job.resolvedText = res.jobDescription;
+              resolve();
+            },
+            error: (err) => {
+              const code = err.error?.code;
+              if (code === 'NOT_FOUND') {
+                job.errorMessage = 'Job listing not found — it may have expired.';
+              } else if (code === 'TIMEOUT') {
+                job.errorMessage = 'Page took too long to load. Try pasting the text directly.';
+              } else {
+                job.errorMessage = 'Could not fetch this page. Try pasting the text directly.';
+              }
+              reject(new Error(job.errorMessage ?? 'Fetch failed'));
+            }
+          });
+        });
+      }
+
+      // Step 2 — Analyze
+      job.status = 'analyzing';
+      this.cdr.detectChanges();
+
+      await new Promise<void>((resolve, reject) => {
+        this.apiService.analyze(job.resolvedText).subscribe({
+          next: (res) => {
+            job.sessionId = res.sessionId;
+            job.company = res.company ?? null;
+            job.role = res.role ?? null;
+            job.decision = res.decision;
+            job.coverage = res.coverage;
+            job.summary = res.summary;
+            job.gapAnalysis = res.gapAnalysis;
+            job.status = 'done';
+            resolve();
+          },
+          error: (err) => {
+            job.errorMessage = err.error?.error || 'Analysis failed.';
+            reject(new Error(job.errorMessage ?? 'Analysis failed'));
+          }
+        });
+      });
+
+    } catch {
+      if (job.status !== 'done') {
+        job.status = 'failed';
+      }
+    }
+
+    this.cdr.detectChanges();
   }
 
-  formatJobId(jobId: string): string {
-    return jobId
-      .split('-')
-      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  }
+  // ── Materials ─────────────────────────────────────────────────────
 
-  toggleBatchSkillDetail(job: BatchJobResult): void {
-    job.showSkillDetail = !job.showSkillDetail;
-  }
-
-  onGenerateBatchMaterials(job: BatchJobResult): void {
+  onGenerateMaterials(job: JobQueueItem): void {
     if (!job.sessionId) return;
     job.generatingMaterials = true;
-    this.error = null;
 
     this.apiService.generateMaterials(job.sessionId).subscribe({
       next: (res) => {
@@ -296,10 +246,24 @@ export class JobAnalysisComponent implements OnInit {
         this.cdr.detectChanges();
       },
       error: () => {
-        this.error = 'Failed to generate materials. Please try again.';
         job.generatingMaterials = false;
         this.cdr.detectChanges();
       }
     });
+  }
+
+  toggleSkillDetail(job: JobQueueItem): void {
+    job.showSkillDetail = !job.showSkillDetail;
+    this.cdr.detectChanges();
+  }
+
+  downloadFile(content: string, filename: string): void {
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 }

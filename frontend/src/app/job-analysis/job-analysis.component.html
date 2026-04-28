@@ -5,7 +5,7 @@
     <p class="subtitle">Know before you apply.</p>
   </header>
 
-  <!-- CV SETUP SECTION — shared between both modes -->
+  <!-- CV SECTION -->
   <section class="cv-section">
     <div class="cv-header">
       <h2>Your CV</h2>
@@ -14,327 +14,262 @@
     <textarea
       [(ngModel)]="cvText"
       placeholder="Paste your CV here once. We'll remember it."
-      [disabled]="loading"
+      [disabled]="isProcessing"
       rows="4">
     </textarea>
     <button
       class="save-cv-btn"
       (click)="onSaveCV()"
-      [disabled]="loading || !cvText">
+      [disabled]="isProcessing || !cvText">
       Save CV
     </button>
   </section>
 
-  <!-- MODE SWITCHER -->
-  <div class="mode-switcher">
-    <button
-      class="mode-btn"
-      [class.active]="mode === 'single'"
-      (click)="setMode('single')"
-      [disabled]="loading">
-      Single Job
-    </button>
-    <button
-      class="mode-btn"
-      [class.active]="mode === 'batch'"
-      (click)="setMode('batch')"
-      [disabled]="loading">
-      Batch (up to 10)
-    </button>
-  </div>
-
   <div *ngIf="error" class="error">{{ error }}</div>
 
-  <!-- SINGLE MODE -->
-  <div *ngIf="mode === 'single'">
+  <!-- JOB QUEUE INPUT -->
+  <section class="queue-section">
+    <h2>Jobs to Evaluate</h2>
 
-    <section class="jd-section">
-      <h2>Job Description</h2>
-      <textarea
-        [(ngModel)]="jobDescription"
-        placeholder="Paste a job URL or the full job description text..."
-        [disabled]="loading || fetchingJD"
-        rows="6">
-      </textarea>
-
-      <div *ngIf="fetchError" class="fetch-error">
-        {{ fetchError }}
-      </div>
-
-      <div *ngIf="fetchingJD" class="fetch-loading">
-        Fetching job description from URL...
-      </div>
-
+    <!-- Input row -->
+    <div class="queue-input-row">
+      <input
+        type="text"
+        [(ngModel)]="currentInput"
+        (keydown)="onKeydown($event)"
+        placeholder="Paste a job URL or job description text..."
+        [disabled]="isProcessing"
+        class="queue-input">
       <button
-        class="analyze-btn"
-        (click)="onSubmitJD()"
-        [disabled]="loading || fetchingJD || !jobDescription">
-        <span *ngIf="!loading && !fetchingJD">Analyze</span>
-        <span *ngIf="fetchingJD">Fetching...</span>
-        <span *ngIf="loading && !fetchingJD">Analyzing...</span>
+        class="add-job-btn"
+        (click)="onAddJob()"
+        [disabled]="isProcessing || !currentInput.trim()">
+        + Add
       </button>
-    </section>
+    </div>
 
-    <!-- SINGLE RESULTS -->
-    <section *ngIf="summary" class="results-section">
+    <!-- Job input cards -->
+    <div class="queue-list" *ngIf="jobs.length > 0">
+      <div
+        *ngFor="let job of jobs"
+        class="queue-card"
+        [ngClass]="job.status">
 
-      <div class="decision-card" [ngClass]="decision">
-        <div class="decision-badge">{{ decision | uppercase }}</div>
-        <p class="summary-text">{{ summary }}</p>
-        <div class="coverage-bar-wrapper">
-          <div class="coverage-bar">
-            <div
-              class="coverage-fill"
-              [style.width.%]="coverage  * 100">
-            </div>
+        <!-- Input state -->
+        <div *ngIf="job.status === 'input'" class="queue-card-input">
+          <div class="queue-card-left">
+            <span class="input-type-badge">
+              {{ job.inputType === 'url' ? '🔗' : '📄' }}
+            </span>
+            <span class="queue-card-label">
+              {{ job.rawInput.length > 80
+                  ? job.rawInput.substring(0, 80) + '...'
+                  : job.rawInput }}
+            </span>
           </div>
-          <span class="coverage-label">
-            {{ coverage  * 100  | number:'1.0-0' }}% match
+          <button class="remove-btn" (click)="onRemoveJob(job)">×</button>
+        </div>
+
+        <!-- Blocked portal state -->
+        <div *ngIf="job.status === 'blocked'" class="queue-card-blocked">
+          <div class="blocked-header">
+            <span class="blocked-icon">⚠️</span>
+            <span class="blocked-label">
+              {{ job.rawInput }} — this portal requires manual input
+            </span>
+            <button class="remove-btn" (click)="onRemoveJob(job)">×</button>
+          </div>
+          <textarea
+            [(ngModel)]="job.manualText"
+            placeholder="Paste the job description text here..."
+            rows="4"
+            class="blocked-textarea">
+          </textarea>
+          <button
+            class="add-manual-btn"
+            (click)="onAddManualText(job)"
+            [disabled]="!job.manualText.trim()">
+            Confirm Text
+          </button>
+        </div>
+
+        <!-- Processing states -->
+        <div *ngIf="job.status === 'queued' ||
+                    job.status === 'fetching' ||
+                    job.status === 'analyzing'"
+             class="queue-card-processing">
+          <div class="processing-left">
+            <span class="status-spinner">⟳</span>
+            <span class="processing-label">
+              <ng-container *ngIf="job.status === 'queued'">Queued</ng-container>
+              <ng-container *ngIf="job.status === 'fetching'">Fetching page...</ng-container>
+              <ng-container *ngIf="job.status === 'analyzing'">Analyzing...</ng-container>
+            </span>
+          </div>
+          <span class="processing-url">
+            {{ job.rawInput.length > 60
+                ? job.rawInput.substring(0, 60) + '...'
+                : job.rawInput }}
           </span>
         </div>
-      </div>
 
-      <!-- MATERIALS SECTION -->
-      <div *ngIf="decision === 'apply' || decision === 'maybe'"
-           class="materials-section">
-
-        <div *ngIf="!materials && !generatingMaterials">
-          <button class="generate-btn" (click)="onGenerateMaterials()">
-            Generate Application Materials
-          </button>
+        <!-- Failed state -->
+        <div *ngIf="job.status === 'failed'" class="queue-card-failed">
+          <span class="failed-icon">✗</span>
+          <span class="failed-message">{{ job.errorMessage }}</span>
+          <button class="remove-btn" (click)="onRemoveJob(job)">×</button>
         </div>
 
-        <div *ngIf="generatingMaterials" class="generating-state">
-          Generating your tailored CV, cover letter and interview prep...
-        </div>
+        <!-- Done state — result card -->
+        <div *ngIf="job.status === 'done'" class="queue-card-done">
 
-        <div *ngIf="materials && !generatingMaterials"
-             class="download-buttons">
-          <button
-            class="download-btn"
-            (click)="downloadFile(materials.tailoredCv, 'tailored-cv.md')">
-            Download Tailored CV
-          </button>
-          <button
-            class="download-btn"
-            (click)="downloadFile(materials.coverLetter, 'cover-letter.md')">
-            Download Cover Letter
-          </button>
-          <button
-            class="download-btn"
-            (click)="downloadFile(materials.interviewPrep, 'interview-prep.md')">
-            Download Interview Prep
-          </button>
-        </div>
-
-      </div>
-
-      <!-- SKILL DETAIL TOGGLE -->
-      <div class="skill-toggle">
-        <button class="toggle-btn" (click)="toggleSkillDetail()">
-          {{ showSkillDetail ? 'Hide skill breakdown' : 'View skill breakdown' }}
-        </button>
-      </div>
-
-      <div *ngIf="showSkillDetail" class="skill-detail">
-        <div class="grid">
-
-          <section class="column">
-            <h3>Your Skills</h3>
-            <div class="list">
-              <div
-                *ngFor="let skill of candidateSkills; let i = index"
-                class="card">
-                <div class="card-header">
-                  <span class="name">{{ skill.name }}</span>
-                  <button class="delete-btn"
-                    (click)="deleteCandidateSkill(i)">×</button>
-                </div>
-                <div class="confidence">
-                  {{ skill.confidence | percent }}
-                </div>
-              </div>
+          <!-- Result header -->
+          <div class="result-header" [ngClass]="job.decision ?? ''">
+            <div class="result-meta">
+              <span class="result-company">{{ job.company }}</span>
+              <span class="result-role">{{ job.role }}</span>
             </div>
-          </section>
-
-          <section class="column">
-            <h3>Job Requirements</h3>
-            <div class="list">
-              <div
-                *ngFor="let skill of jobSkills; let i = index"
-                class="card">
-                <div class="card-header">
-                  <span class="name">{{ skill.name }}</span>
-                  <button class="delete-btn"
-                    (click)="deleteJobSkill(i)">×</button>
-                </div>
-                <div class="badge-row">
-                  <span class="badge" [ngClass]="skill.requirement">
-                    {{ skill.requirement }}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-        </div>
-      </div>
-
-    </section>
-
-  </div>
-
-  <!-- BATCH MODE -->
-  <div *ngIf="mode === 'batch'">
-
-    <section class="jd-section">
-      <h2>Job Descriptions</h2>
-      <p class="batch-hint">
-        Paste multiple job descriptions separated by <code>===</code>
-        on its own line. Maximum 10 jobs.
-      </p>
-      <textarea
-        [(ngModel)]="batchInput"
-        placeholder="Paste first job description here...
-===
-Paste second job description here...
-===
-Paste third job description here..."
-        [disabled]="loading"
-        rows="12">
-      </textarea>
-      <button
-        class="analyze-btn"
-        (click)="onAnalyzeBatch()"
-        [disabled]="loading || !batchInput">
-        <span *ngIf="!loading">Analyze All</span>
-        <span *ngIf="loading">Analyzing...</span>
-      </button>
-    </section>
-
-    <!-- BATCH RESULTS -->
-    <section *ngIf="batchJobs.length > 0" class="results-section">
-      <h2>Results — ranked by fit</h2>
-      <div class="batch-results-list">
-        <div
-          *ngFor="let job of batchJobs; let i = index"
-          class="batch-result-card"
-          [ngClass]="job.decision">
-
-          <div class="batch-rank">#{{ i + 1 }}</div>
-
-          <div class="batch-result-body">
-
-            <!-- Header -->
-            <div class="batch-job-id">{{ job.company }}</div>
-            <div class="batch-job-role">{{ job.role }}</div>
-            <div class="batch-decision-badge">
-              {{ job.decision | uppercase }}
-            </div>
-
-            <!-- Coverage bar -->
-            <div class="coverage-bar-wrapper">
-              <div class="coverage-bar">
-                <div
-                  class="coverage-fill"
-                  [style.width.%]="job.coverage * 100">
-                </div>
-              </div>
-              <span class="coverage-label">
-                {{ job.coverage * 100 | number:'1.0-0' }}% match
+            <div class="result-right">
+              <span class="decision-badge">
+                {{ job.decision | uppercase }}
               </span>
+              <button class="remove-btn" (click)="onRemoveJob(job)">×</button>
             </div>
+          </div>
 
-            <!-- Summary -->
-            <p class="summary-text">{{ job.summary }}</p>
-
-            <!-- Materials section — apply or maybe only -->
-            <div *ngIf="job.decision === 'apply' || job.decision === 'maybe'"
-                 class="materials-section">
-
-              <div *ngIf="!job.materials && !job.generatingMaterials">
-                <button class="generate-btn"
-                  (click)="onGenerateBatchMaterials(job)">
-                  Generate Application Materials
-                </button>
+          <!-- Coverage bar -->
+          <div class="coverage-bar-wrapper">
+            <div class="coverage-bar">
+              <div
+                class="coverage-fill"
+                [ngClass]="job.decision ?? ''"
+                [style.width.%]="(job.coverage ?? 0) * 100">
               </div>
-
-              <div *ngIf="job.generatingMaterials" class="generating-state">
-                Generating your tailored CV, cover letter and interview prep...
-              </div>
-
-              <div *ngIf="job.materials && !job.generatingMaterials"
-                   class="download-buttons">
-                <button class="download-btn"
-                  (click)="downloadFile(job.materials.tailoredCv, 'tailored-cv-' + job.company + '.md')">
-                  Download Tailored CV
-                </button>
-                <button class="download-btn"
-                  (click)="downloadFile(job.materials.coverLetter, 'cover-letter-' + job.company + '.md')">
-                  Download Cover Letter
-                </button>
-                <button class="download-btn"
-                  (click)="downloadFile(job.materials.interviewPrep, 'interview-prep-' + job.company + '.md')">
-                  Download Interview Prep
-                </button>
-              </div>
-
             </div>
+            <span class="coverage-label">
+              {{ (job.coverage ?? 0) * 100 | number:'1.0-0' }}% match
+            </span>
+          </div>
 
-            <!-- Skill detail toggle -->
-            <div class="skill-toggle">
-              <button class="toggle-btn"
-                (click)="toggleBatchSkillDetail(job)">
-                {{ job.showSkillDetail ? 'Hide skill breakdown' 
-                                       : 'View skill breakdown' }}
+          <!-- Summary -->
+          <p class="summary-text">{{ job.summary }}</p>
+
+          <!-- Materials -->
+          <div
+            *ngIf="job.decision === 'apply' || job.decision === 'maybe'"
+            class="materials-section">
+
+            <div *ngIf="!job.materials && !job.generatingMaterials">
+              <button
+                class="generate-btn"
+                (click)="onGenerateMaterials(job)">
+                Generate Application Materials
               </button>
             </div>
 
-            <div *ngIf="job.showSkillDetail" class="skill-detail">
-              <div class="grid">
+            <div *ngIf="job.generatingMaterials" class="generating-state">
+              Generating tailored CV, cover letter and interview prep...
+            </div>
 
-                <section class="column">
-                  <h3>Your Skills</h3>
-                  <div class="list">
-                    <div
-                      *ngFor="let skill of job.gapAnalysis.candidateSkills"
-                      class="card">
-                      <div class="card-header">
-                        <span class="name">{{ skill.name }}</span>
-                      </div>
-                      <div class="confidence">
-                        {{ skill.confidence | percent }}
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section class="column">
-                  <h3>Job Requirements</h3>
-                  <div class="list">
-                    <div
-                      *ngFor="let skill of job.gapAnalysis.requiredSkills"
-                      class="card">
-                      <div class="card-header">
-                        <span class="name">{{ skill.name }}</span>
-                      </div>
-                      <div class="badge-row">
-                        <span class="badge" [ngClass]="skill.requirement">
-                          {{ skill.requirement }}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-              </div>
+            <div
+              *ngIf="job.materials && !job.generatingMaterials"
+              class="download-buttons">
+              <button
+                class="download-btn"
+                (click)="downloadFile(
+                  job.materials.tailoredCv,
+                  'tailored-cv-' + job.company + '.md')">
+                Download Tailored CV
+              </button>
+              <button
+                class="download-btn"
+                (click)="downloadFile(
+                  job.materials.coverLetter,
+                  'cover-letter-' + job.company + '.md')">
+                Download Cover Letter
+              </button>
+              <button
+                class="download-btn"
+                (click)="downloadFile(
+                  job.materials.interviewPrep,
+                  'interview-prep-' + job.company + '.md')">
+                Download Interview Prep
+              </button>
             </div>
 
           </div>
+
+          <!-- Skill breakdown -->
+          <div class="skill-toggle">
+            <button
+              class="toggle-btn"
+              (click)="toggleSkillDetail(job)">
+              {{ job.showSkillDetail
+                  ? 'Hide skill breakdown'
+                  : 'View skill breakdown' }}
+            </button>
+          </div>
+
+          <div *ngIf="job.showSkillDetail" class="skill-detail">
+            <div class="grid">
+
+              <section class="column">
+                <h3>Your Skills</h3>
+                <div class="list">
+                  <div
+                    *ngFor="let skill of job.gapAnalysis?.candidateSkills"
+                    class="card">
+                    <div class="card-header">
+                      <span class="name">{{ skill.name }}</span>
+                    </div>
+                    <div class="confidence">
+                      {{ skill.confidence | percent }}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="column">
+                <h3>Job Requirements</h3>
+                <div class="list">
+                  <div
+                    *ngFor="let skill of job.gapAnalysis?.requiredSkills"
+                    class="card">
+                    <div class="card-header">
+                      <span class="name">{{ skill.name }}</span>
+                    </div>
+                    <div class="badge-row">
+                      <span
+                        class="badge"
+                        [ngClass]="skill.requirement">
+                        {{ skill.requirement }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+            </div>
+          </div>
+
         </div>
       </div>
-    </section>
+    </div>
 
-  </div>
+    <!-- Analyze button -->
+    <div class="queue-actions" *ngIf="readyJobs.length > 0 || isProcessing">
+      <button
+        class="analyze-btn"
+        (click)="onAnalyzeAll()"
+        [disabled]="isProcessing || readyJobs.length === 0">
+        <span *ngIf="!isProcessing">
+          Analyze {{ readyJobs.length }}
+          {{ readyJobs.length === 1 ? 'job' : 'jobs' }}
+        </span>
+        <span *ngIf="isProcessing">Processing...</span>
+      </button>
+    </div>
+
+  </section>
 
 </div>

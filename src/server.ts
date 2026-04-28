@@ -200,7 +200,7 @@ app.post('/fetch-jd', async (req, res) => {
       });
     }
 
-    console.error('Fetch JD failed:', error.message);
+    console.error('Fetch JD failed:', error.message, error.response?.status, error.code);
     return res.status(500).json({
       error: 'Failed to fetch job description. Please paste the text directly.',
       code: 'FETCH_FAILED'
