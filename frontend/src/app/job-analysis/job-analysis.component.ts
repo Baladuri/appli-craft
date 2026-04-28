@@ -41,6 +41,10 @@ export class JobAnalysisComponent implements OnInit {
   batchResults: BatchRanking[] = [];
   batchJobs: BatchJobResult[] = [];
 
+  // ── URL fetch state ──────────────────────────────────────────────
+  fetchingJD: boolean = false;
+  fetchError: string | null = null;
+
   constructor(
     private apiService: ApiService,
     private cdr: ChangeDetectorRef
@@ -133,6 +137,55 @@ export class JobAnalysisComponent implements OnInit {
 
   toggleSkillDetail(): void {
     this.showSkillDetail = !this.showSkillDetail;
+  }
+
+  isUrl(text: string): boolean {
+    try {
+      const url = new URL(text.trim());
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
+  onSubmitJD(): void {
+    const input = this.jobDescription.trim();
+
+    if (!input) {
+      this.error = 'Please provide a Job Description';
+      return;
+    }
+
+    if (this.isUrl(input)) {
+      this.fetchingJD = true;
+      this.fetchError = null;
+      this.error = null;
+
+      this.apiService.fetchJD(input).subscribe({
+        next: (res) => {
+          this.jobDescription = res.jobDescription;
+          this.fetchingJD = false;
+          this.onAnalyze();
+        },
+        error: (err) => {
+          this.fetchingJD = false;
+          const code = err.error?.code;
+
+          if (code === 'PORTAL_BLOCKED') {
+            this.fetchError = 'This portal blocks automated access. Please paste the job description text below.';
+          } else if (code === 'NOT_FOUND') {
+            this.fetchError = 'Job listing not found — it may have expired.';
+          } else if (code === 'TIMEOUT') {
+            this.fetchError = 'Page took too long to load. Please paste the job description text below.';
+          } else {
+            this.fetchError = 'Could not fetch this page. Please paste the job description text below.';
+          }
+          this.cdr.detectChanges();
+        }
+      });
+    } else {
+      this.onAnalyze();
+    }
   }
 
   deleteCandidateSkill(index: number): void {

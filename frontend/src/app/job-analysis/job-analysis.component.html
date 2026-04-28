@@ -52,16 +52,26 @@
       <h2>Job Description</h2>
       <textarea
         [(ngModel)]="jobDescription"
-        placeholder="Paste the job description here..."
-        [disabled]="loading"
+        placeholder="Paste a job URL or the full job description text..."
+        [disabled]="loading || fetchingJD"
         rows="6">
       </textarea>
+
+      <div *ngIf="fetchError" class="fetch-error">
+        {{ fetchError }}
+      </div>
+
+      <div *ngIf="fetchingJD" class="fetch-loading">
+        Fetching job description from URL...
+      </div>
+
       <button
         class="analyze-btn"
-        (click)="onAnalyze()"
-        [disabled]="loading || !jobDescription">
-        <span *ngIf="!loading">Analyze</span>
-        <span *ngIf="loading">Analyzing...</span>
+        (click)="onSubmitJD()"
+        [disabled]="loading || fetchingJD || !jobDescription">
+        <span *ngIf="!loading && !fetchingJD">Analyze</span>
+        <span *ngIf="fetchingJD">Fetching...</span>
+        <span *ngIf="loading && !fetchingJD">Analyzing...</span>
       </button>
     </section>
 

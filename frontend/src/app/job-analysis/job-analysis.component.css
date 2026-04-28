@@ -441,3 +441,22 @@ footer {
   color: #64748b;
   margin-bottom: 6px;
 }
+
+.fetch-error {
+  color: #dc2626;
+  font-size: 13px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: #fef2f2;
+  border-radius: 6px;
+  border: 1px solid #fecaca;
+}
+
+.fetch-loading {
+  color: #64748b;
+  font-size: 13px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-radius: 6px;
+}

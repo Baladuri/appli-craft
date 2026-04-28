@@ -34,4 +34,8 @@ export class ApiService {
   analyzeBatch(jobs: { jobDescription: string }[]): Observable<any> {
     return this.http.post<any>(`${this.baseUrl}/analyze/batch`, { jobs });
   }
+
+  fetchJD(url: string): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/fetch-jd`, { url });
+  }
 }

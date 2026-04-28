@@ -23,6 +23,35 @@ const sessions = new Map<string, AnalysisSession>();
 const PERSISTENT_CV_PATH = path.join(__dirname, '../data/candidate-cv.md');
 const PERSISTENT_CV_HASH_PATH = path.join(__dirname, '../data/candidate-cv.hash');
 
+// ─── Portal Config ──────────────────────────────────────────────────
+
+const PORTAL_CONFIG: Record<string, 'allowed' | 'blocked' | 'unknown'> = {
+  'linkedin.com': 'blocked',
+  'indeed.com': 'blocked',
+  'glassdoor.com': 'blocked',
+  'xing.com': 'blocked',
+  'stepstone.de': 'allowed',
+  'arbeitsagentur.de': 'allowed',
+  'jobs.lever.co': 'allowed',
+  'boards.greenhouse.io': 'allowed',
+  'apply.workable.com': 'allowed',
+  'jobs.ashbyhq.com': 'allowed',
+};
+
+function classifyPortal(url: string): 'allowed' | 'blocked' | 'unknown' {
+  try {
+    const hostname = new URL(url).hostname.replace('www.', '');
+    for (const [domain, status] of Object.entries(PORTAL_CONFIG)) {
+      if (hostname === domain || hostname.endsWith('.' + domain)) {
+        return status;
+      }
+    }
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────
 
 function stripFrontmatter(text: string): string {
@@ -33,6 +62,41 @@ function stripFrontmatter(text: string): string {
   );
   if (closingIndex === -1) return text;
   return lines.slice(closingIndex + 1).join('\n').trim();
+}
+
+async function fetchAndCleanJD(url: string): Promise<string> {
+  const axios = require('axios');
+  const { JSDOM } = require('jsdom');
+  const { Readability } = require('@mozilla/readability');
+
+  const response = await axios.get(url, {
+    timeout: 10000,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+    },
+    maxRedirects: 5,
+  });
+
+  const html = response.data;
+  const dom = new JSDOM(html, { url });
+  const reader = new Readability(dom.window.document);
+  const article = reader.parse();
+
+  if (!article || !article.textContent) {
+    throw new Error('Could not extract content from page');
+  }
+
+  const cleanText = article.textContent
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (cleanText.length < 200) {
+    throw new Error('Extracted content too short — page may require login or JavaScript rendering');
+  }
+
+  return cleanText;
 }
 
 // ─── Endpoints ──────────────────────────────────────────────────────
@@ -65,6 +129,82 @@ app.get('/cv', (req, res) => {
     res.json({ exists: true, cvText });
   } else {
     res.json({ exists: false });
+  }
+});
+
+app.post('/fetch-jd', async (req, res) => {
+  const { url } = req.body;
+
+  if (!url) {
+    return res.status(400).json({
+      error: 'url is required',
+      code: 'MISSING_URL'
+    });
+  }
+
+  // Validate URL format
+  try {
+    new URL(url);
+  } catch {
+    return res.status(400).json({
+      error: 'Invalid URL format',
+      code: 'INVALID_URL'
+    });
+  }
+
+  // Classify portal
+  const portalStatus = classifyPortal(url);
+
+  if (portalStatus === 'blocked') {
+    return res.status(403).json({
+      error: 'This job portal does not allow automated fetching. Please paste the job description text directly.',
+      code: 'PORTAL_BLOCKED'
+    });
+  }
+
+  try {
+    const cleanText = await fetchAndCleanJD(url);
+
+    res.json({
+      jobDescription: cleanText,
+      source: url,
+      portalStatus
+    });
+
+  } catch (error: any) {
+    if (error.response?.status === 403 || error.response?.status === 401) {
+      return res.status(403).json({
+        error: 'This page requires login or blocks automated access. Please paste the job description text directly.',
+        code: 'ACCESS_DENIED'
+      });
+    }
+
+    if (error.response?.status === 404) {
+      return res.status(404).json({
+        error: 'Job listing not found. It may have expired or been removed.',
+        code: 'NOT_FOUND'
+      });
+    }
+
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      return res.status(408).json({
+        error: 'The page took too long to respond. Please paste the job description text directly.',
+        code: 'TIMEOUT'
+      });
+    }
+
+    if (error.message?.includes('too short') || error.message?.includes('Could not extract')) {
+      return res.status(422).json({
+        error: 'Could not extract job content from this page. Please paste the job description text directly.',
+        code: 'EXTRACTION_FAILED'
+      });
+    }
+
+    console.error('Fetch JD failed:', error.message);
+    return res.status(500).json({
+      error: 'Failed to fetch job description. Please paste the text directly.',
+      code: 'FETCH_FAILED'
+    });
   }
 });
 
