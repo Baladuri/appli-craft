@@ -11,18 +11,58 @@
       <h2>Your CV</h2>
       <span *ngIf="cvSaved" class="cv-saved-badge">✓ Saved</span>
     </div>
-    <textarea
-      [(ngModel)]="cvText"
-      placeholder="Paste your CV here once. We'll remember it."
-      [disabled]="isProcessing"
-      rows="4">
-    </textarea>
-    <button
-      class="save-cv-btn"
-      (click)="onSaveCV()"
-      [disabled]="isProcessing || !cvText">
-      Save CV
-    </button>
+
+    <!-- Upload option — primary -->
+    <div class="cv-upload-area">
+      <label class="cv-upload-label" [class.disabled]="isProcessing">
+        <input
+          type="file"
+          accept=".pdf,.docx"
+          (change)="onCVFileSelected($event)"
+          [disabled]="isProcessing || cvUploading"
+          class="cv-file-input">
+        <span *ngIf="!cvUploading">
+          📄 Upload CV — PDF or DOCX
+        </span>
+        <span *ngIf="cvUploading">
+          Processing file...
+        </span>
+      </label>
+    </div>
+
+    <!-- Upload error -->
+    <div *ngIf="cvUploadError" class="cv-upload-error">
+      {{ cvUploadError }}
+    </div>
+
+    <!-- Paste toggle -->
+    <div class="cv-paste-toggle">
+      <button
+        class="cv-paste-toggle-btn"
+        (click)="toggleCvPaste()"
+        [disabled]="isProcessing">
+        {{ showCvPaste
+            ? 'Hide text input'
+            : 'Or paste CV text instead' }}
+      </button>
+    </div>
+
+    <!-- Paste fallback — shown when toggled or on extraction failure -->
+    <div *ngIf="showCvPaste" class="cv-paste-area">
+      <textarea
+        [(ngModel)]="cvText"
+        placeholder="Paste your CV text here..."
+        [disabled]="isProcessing"
+        rows="6">
+      </textarea>
+      <button
+        class="save-cv-btn"
+        (click)="onSaveCV()"
+        [disabled]="isProcessing || !cvText">
+        Save CV
+      </button>
+    </div>
+
   </section>
 
   <div *ngIf="error" class="error">{{ error }}</div>

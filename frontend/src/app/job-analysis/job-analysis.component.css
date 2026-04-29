@@ -565,3 +565,67 @@ textarea:disabled {
 }
 
 .remove-btn:hover { color: #dc2626; }
+
+.cv-upload-area {
+  margin-bottom: 8px;
+}
+
+.cv-upload-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #64748b;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.cv-upload-label:hover {
+  border-color: #3b82f6;
+  background: #f0f9ff;
+  color: #3b82f6;
+}
+
+.cv-upload-label.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cv-file-input {
+  display: none;
+}
+
+.cv-upload-error {
+  font-size: 13px;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.cv-paste-toggle {
+  margin-bottom: 8px;
+}
+
+.cv-paste-toggle-btn {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.cv-paste-toggle-btn:hover {
+  color: #3b82f6;
+}
+
+.cv-paste-area {
+  margin-top: 8px;
+}

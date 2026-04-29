@@ -38,4 +38,10 @@ export class ApiService {
   fetchJD(url: string): Observable<any> {
     return this.http.post<any>(`${this.baseUrl}/fetch-jd`, { url });
   }
+
+  uploadCV(file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<any>(`${this.baseUrl}/cv/upload`, formData);
+  }
 }

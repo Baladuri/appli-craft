@@ -24,6 +24,9 @@ export class JobAnalysisComponent implements OnInit {
   // ── CV state ──────────────────────────────────────────────────────
   cvText: string = '';
   cvSaved: boolean = false;
+  cvUploadError: string | null = null;
+  cvUploading: boolean = false;
+  showCvPaste: boolean = false;
 
   // ── Queue state ───────────────────────────────────────────────────
   currentInput: string = '';
@@ -52,6 +55,60 @@ export class JobAnalysisComponent implements OnInit {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  onCVFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+
+    const file = input.files[0];
+    const allowedTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument'
+        + '.wordprocessingml.document'
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      this.cvUploadError = 
+        'Only PDF and DOCX files are supported.';
+      return;
+    }
+
+    this.cvUploading = true;
+    this.cvUploadError = null;
+
+    this.apiService.uploadCV(file).subscribe({
+      next: () => {
+        this.cvSaved = true;
+        this.cvUploading = false;
+        this.cvUploadError = null;
+        // Reset file input
+        input.value = '';
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.cvUploading = false;
+        const code = err.error?.code;
+
+        if (code === 'EXTRACTION_TOO_SHORT') {
+          this.cvUploadError = err.error?.error;
+          this.showCvPaste = true;
+        } else if (code === 'UNSUPPORTED_FORMAT') {
+          this.cvUploadError = 
+            'Only PDF and DOCX files are supported.';
+        } else {
+          this.cvUploadError = 
+            'Failed to process file. ' +
+            'Please paste your CV text instead.';
+          this.showCvPaste = true;
+        }
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  toggleCvPaste(): void {
+    this.showCvPaste = !this.showCvPaste;
   }
 
   // ── Input helpers ─────────────────────────────────────────────────

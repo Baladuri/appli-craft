@@ -5,6 +5,8 @@ import * as path from 'path';
 import { runApplication, runApplicationBatch, runMaterials } from './index';
 import { OrchestratorConfig, GapAnalysis } from './core/types';
 import { ClaudeClient } from './core/claude-client';
+import multer from 'multer';
+import * as os from 'os';
 
 const app = express();
 const port = 3000;
@@ -19,6 +21,23 @@ interface AnalysisSession {
 }
 
 const sessions = new Map<string, AnalysisSession>();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  fileFilter: (req, file, cb) => {
+    const allowed = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument'
+        + '.wordprocessingml.document'
+    ];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF and DOCX files are supported'));
+    }
+  }
+});
 
 const PERSISTENT_CV_PATH = path.join(__dirname, '../data/candidate-cv.md');
 const PERSISTENT_CV_HASH_PATH = path.join(__dirname, '../data/candidate-cv.hash');
@@ -121,6 +140,84 @@ app.post('/cv', (req, res) => {
   fs.writeFileSync(PERSISTENT_CV_HASH_PATH, newHash);
   
   res.json({ message: 'CV saved successfully' });
+});
+
+app.post('/cv/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({
+      error: 'No file provided',
+      code: 'NO_FILE'
+    });
+  }
+
+  try {
+    let extractedText = '';
+    const mimeType = req.file.mimetype;
+
+    if (mimeType === 'application/pdf') {
+      const pdfParse = require('pdf-parse');
+      const pdfData = await pdfParse(req.file.buffer);
+      extractedText = pdfData.text;
+    } else {
+      const mammoth = require('mammoth');
+      const result = await mammoth.extractRawText({
+        buffer: req.file.buffer
+      });
+      extractedText = result.value;
+    }
+
+    // Clean up whitespace
+    extractedText = extractedText
+      .replace(/\r\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    // Check if extraction produced meaningful content
+    if (extractedText.length < 300) {
+      return res.status(422).json({
+        error: 'Could not extract enough text from this file. ' +
+               'It may be a scanned PDF. ' +
+               'Please paste your CV text instead.',
+        code: 'EXTRACTION_TOO_SHORT'
+      });
+    }
+
+    // Save to persistent storage — same as POST /cv
+    if (!fs.existsSync(path.dirname(PERSISTENT_CV_PATH))) {
+      fs.mkdirSync(path.dirname(PERSISTENT_CV_PATH), 
+        { recursive: true });
+    }
+
+    const crypto = require('crypto');
+    const newHash = crypto
+      .createHash('md5')
+      .update(extractedText)
+      .digest('hex');
+
+    fs.writeFileSync(PERSISTENT_CV_PATH, extractedText);
+    fs.writeFileSync(PERSISTENT_CV_HASH_PATH, newHash);
+
+    res.json({
+      message: 'CV uploaded and saved successfully',
+      characterCount: extractedText.length
+    });
+
+  } catch (error: any) {
+    console.error('CV upload failed:', error.message);
+
+    if (error.message?.includes('Only PDF and DOCX')) {
+      return res.status(400).json({
+        error: 'Only PDF and DOCX files are supported',
+        code: 'UNSUPPORTED_FORMAT'
+      });
+    }
+
+    return res.status(500).json({
+      error: 'Failed to process file. ' +
+             'Please paste your CV text instead.',
+      code: 'PARSE_FAILED'
+    });
+  }
 });
 
 app.get('/cv', (req, res) => {
