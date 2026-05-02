@@ -333,26 +333,43 @@ app.post('/analyze', async (req, res) => {
 
     // Generate paragraph summary
     const llmClient = new ClaudeClient();
-    const summaryPrompt = `You are a career advisor giving honest direct advice.
+    const summaryPrompt = `You are a career advisor giving honest 
+direct advice.
 
 Based on this job fit analysis write a 3-4 sentence paragraph
 telling the candidate whether to apply and exactly why.
 
 Decision: ${result.decision.applyDecision}
-Coverage score: ${result.decision.hardCoverage}
+Coverage: ${result.decision.hardCoverage}
 
-Required skills:
-${JSON.stringify(result.gapAnalysis.requiredSkills, null, 2)}
+Matched skills:
+${result.gapAnalysis.requiredSkills
+  .filter((s: any) => {
+    const norm = (t: string) => t.toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+    return result.gapAnalysis.candidateSkills
+      .some((c: any) => norm(c.name) === norm(s.name));
+  })
+  .map((s: any) => `- ${s.name} (${s.requirement})`)
+  .join('\n')}
+
+Missing skills:
+${result.gapAnalysis.requiredSkills
+  .filter((s: any) => {
+    const norm = (t: string) => t.toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+    return !result.gapAnalysis.candidateSkills
+      .some((c: any) => norm(c.name) === norm(s.name));
+  })
+  .map((s: any) => `- ${s.name} (${s.requirement})`)
+  .join('\n')}
 
 Rules:
 - Be direct and specific, name actual skills
-- Start with the strongest point in their favour
-- Name the specific gap if there is one
-- End with a clear recommendation and one specific action
-- Do not use bullet points
-- Do not mention coverage scores or percentages
-- Write as if talking to the candidate directly
-- Maximum 4 sentences`;
+- Start with strongest matched skills
+- Name the most critical missing skill if any
+- End with clear recommendation and one action
+- No bullet points, no percentages, max 4 sentences`;
 
     const summary = await llmClient.generateText(summaryPrompt);
 
@@ -460,26 +477,43 @@ app.post('/analyze/batch', async (req, res) => {
         });
 
         // Generate summary paragraph
-        const summaryPrompt = `You are a career advisor giving honest direct advice.
+        const summaryPrompt = `You are a career advisor giving honest 
+direct advice.
 
 Based on this job fit analysis write a 3-4 sentence paragraph
 telling the candidate whether to apply and exactly why.
 
 Decision: ${result.decision.applyDecision}
-Coverage score: ${result.decision.hardCoverage}
+Coverage: ${result.decision.hardCoverage}
 
-Required skills:
-${JSON.stringify(result.gapAnalysis.requiredSkills, null, 2)}
+Matched skills:
+${result.gapAnalysis.requiredSkills
+  .filter((s: any) => {
+    const norm = (t: string) => t.toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+    return result.gapAnalysis.candidateSkills
+      .some((c: any) => norm(c.name) === norm(s.name));
+  })
+  .map((s: any) => `- ${s.name} (${s.requirement})`)
+  .join('\n')}
+
+Missing skills:
+${result.gapAnalysis.requiredSkills
+  .filter((s: any) => {
+    const norm = (t: string) => t.toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+    return !result.gapAnalysis.candidateSkills
+      .some((c: any) => norm(c.name) === norm(s.name));
+  })
+  .map((s: any) => `- ${s.name} (${s.requirement})`)
+  .join('\n')}
 
 Rules:
 - Be direct and specific, name actual skills
-- Start with the strongest point in their favour
-- Name the specific gap if there is one
-- End with a clear recommendation and one specific action
-- Do not use bullet points
-- Do not mention coverage scores or percentages
-- Write as if talking to the candidate directly
-- Maximum 4 sentences`;
+- Start with strongest matched skills
+- Name the most critical missing skill if any
+- End with clear recommendation and one action
+- No bullet points, no percentages, max 4 sentences`;
 
         const summary = await llmClient.generateText(summaryPrompt);
 
