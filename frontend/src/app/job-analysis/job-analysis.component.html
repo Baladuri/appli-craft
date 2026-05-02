@@ -194,15 +194,23 @@
           <!-- Summary -->
           <p class="summary-text">{{ job.summary }}</p>
 
-          <!-- ATS Report -->
+          <!-- ATS Visibility -->
           <div *ngIf="job.atsReport" class="ats-section">
+
             <h4 class="ats-title">ATS Visibility</h4>
 
-            <div *ngIf="job.atsReport.termGaps.length > 0"
-                 class="ats-group">
-              <div class="ats-group-label ats-warn">
-                ⚠ Add these exact terms to your CV
-              </div>
+            <!-- No terminology gaps — all clear -->
+            <p *ngIf="job.atsReport.termGaps.length === 0"
+               class="ats-all-clear">
+              ✓ Your CV terminology matches this JD
+            </p>
+
+            <!-- Terminology gaps — actionable -->
+            <div *ngIf="job.atsReport.termGaps.length > 0">
+              <p class="ats-intro">
+                You have these skills but your CV uses different terminology.
+                Add these exact terms before applying:
+              </p>
               <div class="ats-chips">
                 <span
                   *ngFor="let item of job.atsReport.termGaps"
@@ -217,33 +225,6 @@
               </p>
             </div>
 
-            <div *ngIf="job.atsReport.genuineGaps.length > 0"
-                 class="ats-group">
-              <div class="ats-group-label ats-danger">
-                ✗ Genuine skill gaps
-              </div>
-              <div class="ats-chips">
-                <span
-                  *ngFor="let item of job.atsReport.genuineGaps"
-                  class="ats-chip danger">
-                  {{ item.skill }}
-                </span>
-              </div>
-            </div>
-
-            <div *ngIf="job.atsReport.safe.length > 0"
-                 class="ats-group">
-              <div class="ats-group-label ats-safe">
-                ✓ ATS safe keywords
-              </div>
-              <div class="ats-chips">
-                <span
-                  *ngFor="let item of job.atsReport.safe"
-                  class="ats-chip safe">
-                  {{ item.skill }}
-                </span>
-              </div>
-            </div>
           </div>
 
           <!-- Materials -->
