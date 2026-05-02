@@ -9,6 +9,18 @@ export interface CandidateSkill {
   confidence: number;
 }
 
+export interface ATSSkillResult {
+  skill: string;
+  requirement: string;
+}
+
+export interface ATSReport {
+  safe: ATSSkillResult[];
+  termGaps: ATSSkillResult[];
+  genuineGaps: ATSSkillResult[];
+  suggestions: string;
+}
+
 export interface GapAnalysis {
   requiredSkills: JobSkill[];
   candidateSkills: CandidateSkill[];
@@ -70,6 +82,7 @@ export interface JobQueueItem {
   coverage: number | null;
   summary: string | null;
   gapAnalysis: GapAnalysis | null;
+  atsReport: ATSReport | null;
 
   // Materials state
   materials: {

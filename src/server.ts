@@ -370,7 +370,8 @@ Rules:
       summary,
       decision: result.decision.applyDecision,
       coverage: result.decision.hardCoverage,
-      gapAnalysis: result.gapAnalysis
+      gapAnalysis: result.gapAnalysis,
+      atsReport: result.atsReport
     });
   } catch (error: any) {
     console.error('Analysis failed:', error);
@@ -489,7 +490,8 @@ Rules:
           decision: result.decision.applyDecision,
           coverage: result.decision.hardCoverage,
           gapAnalysis: result.gapAnalysis,
-          summary
+          summary,
+          atsReport: result.atsReport
         };
       })
     );

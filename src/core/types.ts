@@ -44,6 +44,18 @@ export interface ApplicationMaterials {
   interviewPrep: string;
 }
 
+export interface ATSSkillResult {
+  skill: string;
+  requirement: string;
+}
+
+export interface ATSReport {
+  safe: ATSSkillResult[];
+  termGaps: ATSSkillResult[];
+  genuineGaps: ATSSkillResult[];
+  suggestions: string;
+}
+
 export interface PipelineResult {
   decision: ApplicationDecision;
   gapAnalysis: GapAnalysis;
@@ -51,6 +63,7 @@ export interface PipelineResult {
   summary: string;
   company: string;
   role: string;
+  atsReport: ATSReport;
 }
 
 export interface SemanticMatch {

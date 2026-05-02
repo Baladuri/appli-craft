@@ -15,6 +15,7 @@ import { WriterAgent } from './agents/writer.agent';
 import { InterviewerAgent } from './agents/interviewer.agent';
 import { normalize, matchSkill } from './core/matcher';
 import { calculateJobScore } from './core/scoring';
+import { analyzeATS } from './core/ats-analyzer';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
@@ -230,6 +231,13 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<Pi
     hardCoverage: parseFloat(hardCoverage.toFixed(2))
   };
 
+  // ── ATS Analysis ─────────────────────────────────────────────
+  const atsReport = await analyzeATS(
+    gapAnalysis,
+    context.baseCv,
+    llmClient
+  );
+
   if (decisionContent.applyDecision === 'skip') {
     console.log('  ⏭  Decision is skip — materials generation skipped');
     return {
@@ -238,7 +246,8 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<Pi
       companyBrief,
       summary: '',
       company: extractedCompany,
-      role: extractedRole
+      role: extractedRole,
+      atsReport
     };
   }
 
@@ -248,7 +257,8 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<Pi
     companyBrief,
     summary: '',
     company: extractedCompany,
-    role: extractedRole
+    role: extractedRole,
+    atsReport
   };
 }
 
@@ -322,7 +332,13 @@ export async function runApplicationBatch(
           companyBrief: '',
           summary: '',
           company: '',
-          role: ''
+          role: '',
+          atsReport: {
+            safe: [],
+            termGaps: [],
+            genuineGaps: [],
+            suggestions: ''
+          }
         });
     }
     console.log(`=== Done ===\n`);

@@ -1,7 +1,7 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ApiService } from '../api.service';
-import { JobQueueItem } from '../models';
+import { JobQueueItem, ATSReport } from '../models';
 import { FormsModule } from '@angular/forms';
 
 // Blocked portal domains
@@ -160,6 +160,7 @@ export class JobAnalysisComponent implements OnInit {
       coverage: null,
       summary: null,
       gapAnalysis: null,
+      atsReport: null,
       materials: null,
       generatingMaterials: false,
       showSkillDetail: false,
@@ -271,6 +272,7 @@ export class JobAnalysisComponent implements OnInit {
             job.coverage = res.coverage;
             job.summary = res.summary;
             job.gapAnalysis = res.gapAnalysis;
+            job.atsReport = res.atsReport ?? null;
             job.status = 'done';
             resolve();
           },
