@@ -31,7 +31,11 @@ export class JobAnalysisComponent implements OnInit {
   // ── Queue state ───────────────────────────────────────────────────
   currentInput: string = '';
   jobs: JobQueueItem[] = [];
+  selectedJob: JobQueueItem | null = null;
+  showAddJobInput: boolean = false;
   isProcessing: boolean = false;
+  activeJobId: string | null = null;
+  downloadTimestamps: Record<string, true> = {};
   error: string | null = null;
 
   constructor(
@@ -169,6 +173,7 @@ export class JobAnalysisComponent implements OnInit {
 
     this.jobs.push(item);
     this.currentInput = '';
+    if (!this.selectedJob) { this.selectJob(item); }
     this.cdr.detectChanges();
   }
 
@@ -190,6 +195,15 @@ export class JobAnalysisComponent implements OnInit {
       event.preventDefault();
       this.onAddJob();
     }
+    if (event.key === 'Escape') {
+      this.onCancelAddJob();
+    }
+  }
+
+  onCancelAddJob(): void {
+    this.showAddJobInput = false;
+    this.currentInput = '';
+    this.cdr.detectChanges();
   }
 
   get readyJobs(): JobQueueItem[] {
@@ -204,6 +218,38 @@ export class JobAnalysisComponent implements OnInit {
     return this.jobs
       .filter(j => j.status === 'done')
       .sort((a, b) => (b.coverage ?? 0) - (a.coverage ?? 0));
+  }
+
+  selectJob(job: JobQueueItem): void {
+    this.selectedJob = job;
+    this.cdr.detectChanges();
+  }
+
+  getJobStatusClass(job: JobQueueItem): string {
+    if (job.status === 'done') {
+      return 'dot-' + (job.decision ?? 'unknown');
+    }
+    if (job.status === 'queued') {
+      return 'dot-queued';
+    }
+    if (job.status === 'fetching') {
+      return 'dot-fetching';
+    }
+    if (job.status === 'analyzing') {
+      return 'dot-analyzing';
+    }
+    if (job.status === 'failed') {
+      return 'dot-failed';
+    }
+    if (job.status === 'blocked') {
+      return 'dot-blocked';
+    }
+    return 'dot-input';
+  }
+
+  focusJobInput(): void {
+    this.showAddJobInput = true;
+    this.cdr.detectChanges();
   }
 
   // ── Processing ────────────────────────────────────────────────────
@@ -231,6 +277,7 @@ export class JobAnalysisComponent implements OnInit {
   }
 
   private async processJob(job: JobQueueItem): Promise<void> {
+    this.activeJobId = job.id;
     try {
       // Step 1 — Fetch URL if needed
       if (job.inputType === 'url' && !job.resolvedText) {
@@ -274,6 +321,9 @@ export class JobAnalysisComponent implements OnInit {
             job.gapAnalysis = res.gapAnalysis;
             job.atsReport = res.atsReport ?? null;
             job.status = 'done';
+            if (!this.selectedJob || this.selectedJob.status !== 'done') {
+              this.selectedJob = job;
+            }
             resolve();
           },
           error: (err) => {
@@ -289,6 +339,7 @@ export class JobAnalysisComponent implements OnInit {
       }
     }
 
+    this.activeJobId = null;
     this.cdr.detectChanges();
   }
 
@@ -311,9 +362,53 @@ export class JobAnalysisComponent implements OnInit {
     });
   }
 
+  // ── Skill helpers ──────────────────────────────────────────────────
+
   toggleSkillDetail(job: JobQueueItem): void {
     job.showSkillDetail = !job.showSkillDetail;
     this.cdr.detectChanges();
+  }
+
+  getSortedCandidateSkills(job: JobQueueItem): { name: string; confidence: number }[] {
+    if (!job.gapAnalysis?.candidateSkills) return [];
+    return [...job.gapAnalysis.candidateSkills].sort(
+      (a, b) => b.confidence - a.confidence
+    );
+  }
+
+  getSortedRequiredSkills(job: JobQueueItem): any[] {
+    if (!job.gapAnalysis?.requiredSkills) return [];
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const order: Record<string, number> = { required: 0, preferred: 1, implicit: 2 };
+    const candidateNames = new Set(
+      (job.gapAnalysis.candidateSkills || []).map((s: any) => norm(s.name))
+    );
+    return [...job.gapAnalysis.requiredSkills].sort((a: any, b: any) => {
+      const reqDiff = order[a.requirement] - order[b.requirement];
+      if (reqDiff !== 0) return reqDiff;
+      const aMatched = candidateNames.has(norm(a.name));
+      const bMatched = candidateNames.has(norm(b.name));
+      if (aMatched !== bMatched) return aMatched ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  candidateSkillIsInRequired(job: JobQueueItem, skillName: string): boolean {
+    if (!job.gapAnalysis?.requiredSkills) return false;
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const target = norm(skillName);
+    return job.gapAnalysis.requiredSkills.some((s: any) => norm(s.name) === target);
+  }
+
+  requiredSkillIsInCandidates(job: JobQueueItem, skillName: string): boolean {
+    if (!job.gapAnalysis?.candidateSkills) return false;
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const target = norm(skillName);
+    return job.gapAnalysis.candidateSkills.some((s: any) => norm(s.name) === target);
+  }
+
+  isLowConfidence(confidence: number): boolean {
+    return confidence < 0.5;
   }
 
   downloadFile(content: string, filename: string): void {
@@ -324,5 +419,21 @@ export class JobAnalysisComponent implements OnInit {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+
+    this.downloadTimestamps[filename] = true;
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      delete this.downloadTimestamps[filename];
+      this.cdr.detectChanges();
+    }, 1500);
+  }
+
+  jobStatusText(status: string): string {
+    switch (status) {
+      case 'queued': return 'Queued — waiting for its turn...';
+      case 'fetching': return 'Fetching job description...';
+      case 'analyzing': return 'Analyzing job...';
+      default: return '';
+    }
   }
 }

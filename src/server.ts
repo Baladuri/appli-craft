@@ -385,6 +385,8 @@ Rules:
     res.json({
       sessionId,
       summary,
+      company: result.company,
+      role: result.role,
       decision: result.decision.applyDecision,
       coverage: result.decision.hardCoverage,
       gapAnalysis: result.gapAnalysis,
