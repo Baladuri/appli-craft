@@ -9,6 +9,12 @@ import {
 } from './core/types';
 import { LLMClient } from './clients/LLMClient';
 import { ClaudeClient } from './core/claude-client';
+import { DeepSeekClient } from './clients/DeepSeekClient';
+
+function createLLMClient(): LLMClient {
+  if (config.llmProvider === 'deepseek') return new DeepSeekClient();
+  return new ClaudeClient();
+}
 import { ResearcherAgent, ResearcherOutput } from './agents/researcher.agent';
 import { AnalystAgent } from './agents/analyst.agent';
 import { WriterAgent } from './agents/writer.agent';
@@ -56,7 +62,7 @@ export async function runApplication(orchConfig: OrchestratorConfig): Promise<Pi
   console.log('🔧 Configuration validated.');
 
   // ── Step 2: Initialize Core Services ──────────────────────────────────────
-  const llmClient: LLMClient = new ClaudeClient();
+  const llmClient: LLMClient = createLLMClient();
 
   console.log(`🤖 Services initialized (Mock Mode: ${config.mockMode})`);
 
@@ -267,7 +273,7 @@ export async function runMaterials(
   companyBrief: string,
   gapAnalysis: GapAnalysis
 ): Promise<ApplicationMaterials> {
-  const llmClient: LLMClient = new ClaudeClient();
+  const llmClient: LLMClient = createLLMClient();
   const writer = new WriterAgent(llmClient);
   const interviewer = new InterviewerAgent(llmClient);
 
