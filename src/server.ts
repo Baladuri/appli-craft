@@ -2,17 +2,22 @@ import express from 'express';
 import cors from 'cors';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createHash, randomUUID } from 'crypto';
+import rateLimit from 'express-rate-limit';
 import { runApplication, runApplicationBatch, runMaterials } from './index';
 import { OrchestratorConfig, GapAnalysis } from './core/types';
 import { ClaudeClient } from './core/claude-client';
 import multer from 'multer';
-import * as os from 'os';
 
 const app = express();
 const port = 3000;
 
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: 'http://localhost:4200',
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type'],
+}));
+app.use(express.json({ limit: '200kb' }));
 
 interface AnalysisSession {
   orchConfig: OrchestratorConfig;
@@ -42,6 +47,35 @@ const upload = multer({
 const PERSISTENT_CV_PATH = path.join(__dirname, '../data/candidate-cv.md');
 const PERSISTENT_CV_HASH_PATH = path.join(__dirname, '../data/candidate-cv.hash');
 
+const CV_MIN = 100;
+const CV_MAX = 50_000;
+const JD_MIN = 100;
+const JD_MAX = 20_000;
+
+// ─── Rate Limiters ──────────────────────────────────────────────────
+
+const standardLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests', code: 'RATE_LIMITED' },
+});
+
+const llmLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests', code: 'RATE_LIMITED' },
+});
+
+app.use('/cv', standardLimiter);
+app.use('/fetch-jd', standardLimiter);
+app.post('/analyze/batch', llmLimiter);   // before /analyze to match correctly
+app.post('/analyze', llmLimiter);
+app.post('/generate-materials', llmLimiter);
+
 // ─── Portal Config ──────────────────────────────────────────────────
 
 const PORTAL_CONFIG: Record<string, 'allowed' | 'blocked' | 'unknown'> = {
@@ -68,6 +102,33 @@ function classifyPortal(url: string): 'allowed' | 'blocked' | 'unknown' {
     return 'unknown';
   } catch {
     return 'unknown';
+  }
+}
+
+// ─── SSRF Guard ─────────────────────────────────────────────────────
+
+const PRIVATE_IP_RE = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.0\.0\.0|::1$|fe80:)/i;
+
+function assertSafeUrl(rawUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error('Invalid URL');
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Only http and https URLs are allowed');
+  }
+
+  const host = parsed.hostname.toLowerCase();
+
+  if (
+    host === 'localhost' ||
+    host.endsWith('.local') ||
+    PRIVATE_IP_RE.test(host)
+  ) {
+    throw new Error('Requests to private/internal addresses are not allowed');
   }
 }
 
@@ -122,9 +183,12 @@ async function fetchAndCleanJD(url: string): Promise<string> {
 
 app.post('/cv', (req, res) => {
   const { cvText } = req.body;
-  
-  if (!cvText) {
-    return res.status(400).json({ error: 'cvText is required' });
+
+  if (typeof cvText !== 'string' || cvText.length < CV_MIN) {
+    return res.status(400).json({ error: 'cvText is too short', code: 'CV_TOO_SHORT' });
+  }
+  if (cvText.length > CV_MAX) {
+    return res.status(400).json({ error: 'cvText exceeds maximum length', code: 'CV_TOO_LONG' });
   }
 
   // Ensure data directory exists
@@ -132,13 +196,11 @@ app.post('/cv', (req, res) => {
     fs.mkdirSync(path.dirname(PERSISTENT_CV_PATH), { recursive: true });
   }
 
-  // Write CV and store hash
-  const crypto = require('crypto');
-  const newHash = crypto.createHash('md5').update(cvText).digest('hex');
-  
+  const newHash = createHash('md5').update(cvText).digest('hex');
+
   fs.writeFileSync(PERSISTENT_CV_PATH, cvText);
   fs.writeFileSync(PERSISTENT_CV_HASH_PATH, newHash);
-  
+
   res.json({ message: 'CV saved successfully' });
 });
 
@@ -184,15 +246,11 @@ app.post('/cv/upload', upload.single('file'), async (req, res) => {
 
     // Save to persistent storage — same as POST /cv
     if (!fs.existsSync(path.dirname(PERSISTENT_CV_PATH))) {
-      fs.mkdirSync(path.dirname(PERSISTENT_CV_PATH), 
+      fs.mkdirSync(path.dirname(PERSISTENT_CV_PATH),
         { recursive: true });
     }
 
-    const crypto = require('crypto');
-    const newHash = crypto
-      .createHash('md5')
-      .update(extractedText)
-      .digest('hex');
+    const newHash = createHash('md5').update(extractedText).digest('hex');
 
     fs.writeFileSync(PERSISTENT_CV_PATH, extractedText);
     fs.writeFileSync(PERSISTENT_CV_HASH_PATH, newHash);
@@ -239,12 +297,11 @@ app.post('/fetch-jd', async (req, res) => {
     });
   }
 
-  // Validate URL format
   try {
-    new URL(url);
-  } catch {
+    assertSafeUrl(url);
+  } catch (error: any) {
     return res.status(400).json({
-      error: 'Invalid URL format',
+      error: error.message,
       code: 'INVALID_URL'
     });
   }
@@ -308,8 +365,11 @@ app.post('/fetch-jd', async (req, res) => {
 app.post('/analyze', async (req, res) => {
   const { jobDescription } = req.body;
 
-  if (!jobDescription) {
-    return res.status(400).json({ error: 'jobDescription is required' });
+  if (typeof jobDescription !== 'string' || jobDescription.length < JD_MIN) {
+    return res.status(400).json({ error: 'jobDescription is too short', code: 'JD_TOO_SHORT' });
+  }
+  if (jobDescription.length > JD_MAX) {
+    return res.status(400).json({ error: 'jobDescription exceeds maximum length', code: 'JD_TOO_LONG' });
   }
 
   if (!fs.existsSync(PERSISTENT_CV_PATH)) {
@@ -333,7 +393,7 @@ app.post('/analyze', async (req, res) => {
 
     // Generate paragraph summary
     const llmClient = new ClaudeClient();
-    const summaryPrompt = `You are a career advisor giving honest 
+    const summaryPrompt = `You are a career advisor giving honest
 direct advice.
 
 Based on this job fit analysis write a 3-4 sentence paragraph
@@ -373,8 +433,7 @@ Rules:
 
     const summary = await llmClient.generateText(summaryPrompt);
 
-    // Store session for on-demand material generation
-    const sessionId = `session-${Date.now()}`;
+    const sessionId = randomUUID();
 
     sessions.set(sessionId, {
       orchConfig,
@@ -394,7 +453,7 @@ Rules:
     });
   } catch (error: any) {
     console.error('Analysis failed:', error);
-    res.status(500).json({ error: 'Analysis failed: ' + error.message });
+    res.status(500).json({ error: 'Analysis failed. Check server logs.' });
   }
 });
 
@@ -426,9 +485,7 @@ app.post('/generate-materials', async (req, res) => {
     });
   } catch (error: any) {
     console.error('Material generation failed:', error);
-    res.status(500).json({
-      error: 'Material generation failed: ' + error.message
-    });
+    res.status(500).json({ error: 'Material generation failed. Check server logs.' });
   }
 });
 
@@ -451,6 +508,15 @@ app.post('/analyze/batch', async (req, res) => {
     });
   }
 
+  for (const job of jobs) {
+    if (typeof job.jobDescription !== 'string' || job.jobDescription.length < JD_MIN) {
+      return res.status(400).json({ error: 'jobDescription is too short', code: 'JD_TOO_SHORT' });
+    }
+    if (job.jobDescription.length > JD_MAX) {
+      return res.status(400).json({ error: 'jobDescription exceeds maximum length', code: 'JD_TOO_LONG' });
+    }
+  }
+
   try {
     const baseCv = fs.readFileSync(PERSISTENT_CV_PATH, 'utf-8');
 
@@ -468,7 +534,7 @@ app.post('/analyze/batch', async (req, res) => {
 
     const enrichedJobs = await Promise.all(
       pipelineResults.map(async (result, index) => {
-        const sessionId = `session-${Date.now()}-${index}`;
+        const sessionId = randomUUID();
 
         const orchConfig = configs[index];
 
@@ -479,7 +545,7 @@ app.post('/analyze/batch', async (req, res) => {
         });
 
         // Generate summary paragraph
-        const summaryPrompt = `You are a career advisor giving honest 
+        const summaryPrompt = `You are a career advisor giving honest
 direct advice.
 
 Based on this job fit analysis write a 3-4 sentence paragraph
@@ -549,9 +615,7 @@ Rules:
 
   } catch (error: any) {
     console.error('Batch analysis failed:', error);
-    res.status(500).json({
-      error: 'Batch analysis failed: ' + error.message
-    });
+    res.status(500).json({ error: 'Batch analysis failed. Check server logs.' });
   }
 });
 
