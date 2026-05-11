@@ -23,7 +23,7 @@ export class ClaudeClient implements LLMClient {
    * @returns The text content of Claude's response.
    * @throws Error if the API call fails or an unexpected response type is received.
    */
-  async generateText(prompt: string): Promise<string> {
+  async generateText(prompt: string, temperature?: number): Promise<string> {
     if (this.mockMode) {
       return "MOCK_RESPONSE";
     }
@@ -32,7 +32,7 @@ export class ClaudeClient implements LLMClient {
       const response = await this.client.messages.create({
         model: config.model,
         max_tokens: 4096,
-        temperature: 0,
+        temperature: temperature ?? 0,
         messages: [{ role: 'user', content: prompt }],
       });
 
@@ -53,7 +53,7 @@ export class ClaudeClient implements LLMClient {
    * @returns The parsed JSON object of type T.
    * @throws Error if the API call fails or if the response is not valid JSON.
    */
-  async generateJSON<T>(prompt: string): Promise<T> {
+  async generateJSON<T>(prompt: string, temperature?: number): Promise<T> {
     if (this.mockMode) {
       if (prompt.includes('information extraction system')) {
         return {
@@ -83,7 +83,7 @@ export class ClaudeClient implements LLMClient {
     const jsonPrompt = `${prompt}\n\nIMPORTANT: Respond ONLY with valid JSON. Do not include any explanations, markdown code blocks, or preamble.`;
 
     try {
-      const responseText = await this.generateText(jsonPrompt);
+      const responseText = await this.generateText(jsonPrompt, temperature);
       // Attempt to find the first '{' and last '}' to handle potential markdown wrappers if Claude ignores instructions
       const cleanResponse = responseText.substring(
           responseText.indexOf('{'),

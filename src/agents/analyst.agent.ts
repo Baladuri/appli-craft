@@ -51,7 +51,7 @@ Output ONLY valid JSON:
 
         const result = await this.llm.generateJSON<{
           candidateSkills: { name: string; confidence: number }[]
-        }>(cvPrompt);
+        }>(cvPrompt, 0);
 
         candidateSkills = result.candidateSkills || [];
         candidateCache.set(cvHash, candidateSkills);
@@ -78,19 +78,71 @@ For each skill provide:
 - "evidence": smallest phrase from JD containing the skill
 - "requirement": classify strictly:
   - "required" → JD uses: "required", "must", "minimum", "essential",
-    "you have", "you bring", "strong experience with", 
+    "you have", "you bring", "strong experience with",
     "solid understanding of"
   - "preferred" → JD uses: "preferred", "nice to have", "ideally",
     "bonus", "plus", "advantageous"
   - "implicit" → skill in tech stack listing with no qualifying language
 
-Exclusion rules:
-- Do NOT extract abstract concepts
-- Do NOT extract soft skills or behaviors
-- Do NOT extract responsibility phrases
-- If two extracted skills refer to the same concept or are commonly 
-  written as a combined term, extract them as one skill using the 
-  combined form, not as two separate entries
+Extraction rule — include ONLY if ALL of these are true:
+
+1. A specific proper name appears explicitly in the JD
+   text — a named technology, tool, framework, database,
+   programming language, cloud service, or
+   industry-standard methodology with a recognized
+   proper name (e.g. "MySQL", "Docker", "Kubernetes",
+   "Scrum", "OAuth")
+
+2. The proper name appears verbatim or as a known
+   canonical alias in the JD text — do not infer,
+   derive, or paraphrase a skill name from a
+   responsibility description
+
+Canonical name rule: use the shortest widely-recognized
+name for each tool, technology, methodology, or platform.
+Remove vendor prefixes unless they are the distinguishing
+part of the name.
+
+Technical examples:
+- "Microsoft .NET" → ".NET"
+- "Microsoft SQL Server" → "MS SQL Server"
+- "Google Kubernetes Engine" → "Kubernetes"
+- "Amazon S3" → "S3"
+- "Apache Kafka" → "Kafka"
+
+Non-technical examples:
+- "Google Analytics 4" → "Google Analytics"
+- "Salesforce CRM" → "Salesforce"
+- "SAP Financial Accounting" → "SAP"
+- "Epic Systems EHR" → "Epic"
+- "HubSpot Marketing Hub" → "HubSpot"
+
+Exception: keep vendor prefix when it distinguishes
+between competing products of the same category.
+- "MS SQL" and "MySQL" both need their prefix
+  to be unambiguous
+- "Google Analytics" and "Adobe Analytics" both
+  need their prefix to be unambiguous
+
+3. If a phrase describes what someone will DO rather
+   than what technology they need to KNOW, and no
+   proper technology name is explicitly stated in that
+   phrase, do not extract anything from it
+
+Examples of what to extract:
+- "Good knowledge of MySQL and MS SQL" → MySQL, MS SQL
+- "Experience with Docker and Kubernetes" → Docker, Kubernetes
+- "TypeScript / Node.js / Next.js" → TypeScript, Node.js, Next.js
+
+Examples of what NOT to extract:
+- "Planning and implementing complex interfaces" → nothing
+  (no proper technology name stated)
+- "Strong understanding of software architecture" → nothing
+  (abstract concept, no proper name)
+- "Experience in fast-paced environments" → nothing
+  (behavioral, no proper name)
+- "Solid understanding of scalability" → nothing
+  (abstract concept)
 
 Output ONLY valid JSON:
 {
@@ -103,7 +155,7 @@ Output ONLY valid JSON:
   ]
 }`;
 
-        const result = await this.llm.generateJSON<{ requiredSkills: any[] }>(jdPrompt);
+        const result = await this.llm.generateJSON<{ requiredSkills: any[] }>(jdPrompt, 0);
         requiredSkills = result.requiredSkills || [];
         jdCache.set(jdHash, requiredSkills);
         console.log(`  📋 JD skills extracted: ${requiredSkills.length} skills`);

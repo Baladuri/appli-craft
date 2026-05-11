@@ -41,6 +41,8 @@ Rules:
 - "partial" → candidate skill partially covers the requirement
 - "none" → no meaningful match exists in the list
 
+A specific tool, library, or product that is a subset or component of a broader technology should be scored as partial, not full. Full match requires the candidate skill to cover the same scope and level as the required skill. When the candidate skill is narrower in scope than the required skill, always return partial.
+
 Be strict but fair. If unsure, return "none".
 DO NOT compute scores or make application decisions.
 

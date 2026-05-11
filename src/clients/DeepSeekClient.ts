@@ -16,7 +16,7 @@ export class DeepSeekClient implements LLMClient {
     this.mockMode = config.mockMode;
   }
 
-  async generateText(prompt: string): Promise<string> {
+  async generateText(prompt: string, temperature?: number): Promise<string> {
     if (this.mockMode) {
       return 'MOCK_RESPONSE';
     }
@@ -25,13 +25,14 @@ export class DeepSeekClient implements LLMClient {
       const response = await this.client.messages.create({
         model: DEEPSEEK_MODEL,
         max_tokens: 4096,
-        temperature: 0,
+        temperature: temperature ?? 0,
+        thinking: { type: 'disabled' },
         messages: [{ role: 'user', content: prompt }],
       });
 
-      const content = response.content[0];
-      if (content.type === 'text') {
-        return content.text;
+      const textBlock = response.content.find((block) => block.type === 'text');
+      if (textBlock && textBlock.type === 'text') {
+        return textBlock.text;
       }
       throw new Error('Unexpected response type from DeepSeek');
     } catch (error: any) {
@@ -39,7 +40,7 @@ export class DeepSeekClient implements LLMClient {
     }
   }
 
-  async generateJSON<T>(prompt: string): Promise<T> {
+  async generateJSON<T>(prompt: string, temperature?: number): Promise<T> {
     if (this.mockMode) {
       if (prompt.includes('information extraction system')) {
         return {
@@ -66,7 +67,7 @@ export class DeepSeekClient implements LLMClient {
     const jsonPrompt = `${prompt}\n\nIMPORTANT: Respond ONLY with valid JSON. Do not include any explanations, markdown code blocks, or preamble.`;
 
     try {
-      const responseText = await this.generateText(jsonPrompt);
+      const responseText = await this.generateText(jsonPrompt, temperature);
       const cleanResponse = responseText.substring(
         responseText.indexOf('{'),
         responseText.lastIndexOf('}') + 1
